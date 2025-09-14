@@ -1,0 +1,4 @@
+*.sw*
+goestuner
+tmp
+*.py
