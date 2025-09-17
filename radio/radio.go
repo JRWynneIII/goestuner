@@ -129,8 +129,8 @@ func (r *Radio[T]) Read(num uint) any {
 		return r.BufferCS16[0]
 	case CF32:
 		timeNs, numSamples, err := r.stream.(*device.SDRStreamCF32).Read(r.BufferCF32, num, flags, timeout)
-		log.Debugf("timeNs: %v, numSamples: %v, err: %v", timeNs, numSamples, err)
-		return r.BufferCF32[0]
+		log.Debugf("lenBuf: %d, timeNs: %v, numSamples: %v, err: %v", len(r.BufferCF32[0]), timeNs, numSamples, err)
+		return r.BufferCF32[0][:numSamples]
 	case CF64:
 		timeNs, numSamples, err := r.stream.(*device.SDRStreamCF64).Read(r.BufferCF64, num, flags, timeout)
 		log.Debugf("timeNs: %v, numSamples: %v, err: %v", timeNs, numSamples, err)

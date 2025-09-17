@@ -1,9 +1,15 @@
 package main
 
 import (
+	"io/ioutil"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/alecthomas/kong"
 	"github.com/charmbracelet/log"
 	"github.com/jrwynneiii/goestuner/config"
+	"github.com/jrwynneiii/goestuner/decode"
 	"github.com/jrwynneiii/goestuner/demod"
 	"github.com/jrwynneiii/goestuner/radio"
 
@@ -61,36 +67,125 @@ func main() {
 			r.Read(100)
 			r.Destroy()
 		case "complex64":
-			r := radio.New[complex64](rdef, rname, radio.CF32, xritDef.ChunkSize)
-			r.Connect()
-			d := demod.New(radio.CF32, float32(rdef.SampleRate), xritDef.ChunkSize, configFile)
-			go d.Start()
-			defer d.Close()
-			go func() {
-				var buf []complex64
-				for {
-					samples := r.Read(xritDef.ChunkSize)
-					if len(samples.([]complex64)) >= int(xritDef.ChunkSize) {
-						buf = samples.([]complex64)
-					} else {
+			if len(cli.Tune.File) == 0 {
+				r := radio.New[complex64](rdef, rname, radio.CF32, xritDef.ChunkSize)
+				r.Connect()
+				defer r.Destroy()
+				demodulator := demod.New(radio.CF32, float32(rdef.SampleRate), xritDef.ChunkSize, configFile)
+				decoder := decode.New(xritDef.ChunkSize, configFile)
+				go decoder.Start()
+				go demodulator.Start()
+				defer demodulator.Close()
+				//Thread to get samples from the radio, and pass it to the demodulator
+				go func() {
+					var buf []complex64
+					for {
+						samples := r.Read(xritDef.ChunkSize)
+						//demod.DumpSamples(samples.([]complex64))
 						buf = append(buf, samples.([]complex64)...)
-					}
 
-					if len(buf) >= int(xritDef.ChunkSize) {
-						d.SampleInput <- samples.([]complex64)
-						buf = []complex64{}
+						if len(buf) >= int(xritDef.ChunkSize) {
+							//log.Infof("Passing %d (chunksize=%d) samples to demodulator", len(buf), int(xritDef.ChunkSize))
+							demodulator.SampleInput <- buf
+							buf = []complex64{}
+						}
+						time.Sleep(5 * time.Millisecond)
 					}
+				}()
+
+				// Thread to check output from demodulator to pass to decoder
+				// TODO: probably build this feature into the demodulator; just pass the channel for the deocder
+				// input into the demodulator and have it populate the channel instead of it's output chan
+				go func() {
+					for {
+						select {
+						case symbols := <-demodulator.SymbolsOutput:
+							//log.Infof("Got symbols: %##v", symbols)
+							for _, symbol := range symbols {
+								decoder.SymbolsInput <- symbol
+							}
+						default:
+							time.Sleep(time.Millisecond)
+						}
+					}
+				}()
+				for {
+					log.Infof("Frame Lock: %v, Signal Quality: %f, BER: %f %%, avgVitCorrections: %f, avgRsCorrections: %f",
+						decoder.FrameLock,
+						decoder.SigQuality,
+						decoder.Viterbi.GetPercentBER(),
+						float64(decoder.AvgVitCorrections),
+						float64(decoder.AverageRsCorrections))
+					log.Infof("Queue usage: demod input: %d, demod output: %d, decoder input: %d",
+						len(demodulator.SampleInput),
+						len(demodulator.SymbolsOutput),
+						len(decoder.SymbolsInput))
+					time.Sleep(time.Second)
 				}
-			}()
+			} else {
+				if data, err := ioutil.ReadFile(cli.Tune.File); err == nil {
+					log.Info("Parsing file")
+					demodulator := demod.New(radio.CF32, float32(rdef.SampleRate), xritDef.ChunkSize, configFile)
+					go demodulator.Start()
+					decoder := decode.New(xritDef.ChunkSize, configFile)
+					go decoder.Start()
+					defer demodulator.Close()
 
-			for {
-				select {
-				case symbols := <-d.SymbolsOutput:
-					log.Infof("Got symbols: %##v\n", symbols)
+					go func() {
+						lines := strings.Split(string(data), "\n")
+						var samples []complex64
+						for _, line := range lines {
+							vals := strings.Split(line, " ")
+							re_s := vals[0]
+							im_s := vals[0]
+							var re, im float32
+							if val, err := strconv.ParseFloat(re_s, 32); err != nil {
+								log.Errorf("Could not parse %s", re_s)
+							} else {
+								re = float32(val)
+							}
+							if val, err := strconv.ParseFloat(im_s, 32); err != nil {
+								log.Errorf("Could not parse %s", im_s)
+							} else {
+								im = float32(val)
+							}
+							samples = append(samples, complex64(complex(re, im)))
+							if len(samples) >= int(xritDef.ChunkSize) {
+								demodulator.SampleInput <- samples
+								samples = []complex64{}
+							}
+
+						}
+					}()
+					// Thread to check output from demodulator to pass to decoder
+					// TODO: probably build this feature into the demodulator; just pass the channel for the deocder
+					// input into the demodulator and have it populate the channel instead of it's output chan
+					go func() {
+						for {
+							select {
+							case symbols := <-demodulator.SymbolsOutput:
+								//log.Infof("Got symbols: %##v", symbols)
+								for _, symbol := range symbols {
+									decoder.SymbolsInput <- symbol
+								}
+							default:
+								time.Sleep(time.Millisecond)
+							}
+						}
+					}()
+					for {
+						log.Infof("Frame Lock: %v, Signal Quality: %f, BER: %f %%, avgVitCorrections: %f, avgRsCorrections: %f",
+							decoder.FrameLock,
+							decoder.SigQuality,
+							decoder.Viterbi.GetPercentBER(),
+							float64(decoder.AvgVitCorrections),
+							float64(decoder.AverageRsCorrections))
+						time.Sleep(time.Second)
+					}
+				} else {
+					log.Errorf("Could not read file %s", cli.Tune.File)
 				}
 			}
-
-			r.Destroy()
 		case "complex128":
 			r := radio.New[complex128](rdef, rname, radio.CF64, xritDef.ChunkSize)
 			r.Connect()

@@ -2,6 +2,7 @@ package demod
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/jrwynneiii/goestuner/config"
@@ -13,8 +14,6 @@ import (
 
 type Demodulator struct {
 	SampleInput       chan []complex64
-	WorkBuffer0       []complex64
-	WorkBuffer1       []complex64
 	SampleType        radio.StreamType
 	SymbolsOutput     chan []uint8
 	bufferSize        uint
@@ -24,13 +23,11 @@ type Demodulator struct {
 	decimFactor       int
 	sampleChunkSize   int
 	gainOmega         float32
-	AGC               *dsp.SimpleAGC
-	SHAGC             SatHelper.AGC
-	//ClockRecovery     *digital.ComplexClockRecovery
-	ClockRecovery SatHelper.ClockRecovery
-	RRCFilter     *dsp.FirFilter
-	Decimator     *dsp.FirFilter
-	CostasLoop    dsp.CostasLoop
+	AGC               SatHelper.AGC
+	ClockRecovery     SatHelper.ClockRecovery
+	RRCFilter         *dsp.FirFilter
+	Decimator         *dsp.FirFilter
+	CostasLoop        dsp.CostasLoop
 }
 
 func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.Koanf) *Demodulator {
@@ -46,8 +43,6 @@ func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.
 
 	d := Demodulator{
 		SampleInput:       make(chan []complex64, bufsize),
-		WorkBuffer0:       make([]complex64, xritConf.ChunkSize),
-		WorkBuffer1:       make([]complex64, xritConf.ChunkSize),
 		SampleType:        stype,
 		SymbolsOutput:     make(chan []byte, bufsize),
 		bufferSize:        bufsize,
@@ -61,14 +56,8 @@ func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.
 
 	log.Debugf("Setting demodulator values: %##v", d)
 
-	d.SHAGC = SatHelper.NewAGC(agcConf.Rate, agcConf.Reference, agcConf.Gain, agcConf.MaxGain)
-	d.AGC = dsp.MakeSimpleAGC(agcConf.Rate, agcConf.Reference, agcConf.Gain, agcConf.MaxGain)
+	d.AGC = SatHelper.NewAGC(agcConf.Rate, agcConf.Reference, agcConf.Gain, agcConf.MaxGain)
 	d.ClockRecovery = SatHelper.NewClockRecovery(d.sps, (clockConf.Alpha*clockConf.Alpha)/4.0, clockConf.Mu, clockConf.Alpha, clockConf.OmegaLimit)
-	//d.ClockRecovery = digital.NewComplexClockRecovery(d.sps,
-	//	d.gainOmega,
-	//	clockConf.Mu,
-	//	clockConf.Alpha,
-	//	clockConf.OmegaLimit)
 	d.RRCFilter = dsp.MakeFirFilter(dsp.MakeRRC(1, float64(srate), xritConf.SymbolRate, xritConf.RRCAlpha, xritConf.RRCTaps))
 	d.Decimator = dsp.MakeDecimationFirFilter(int(xritConf.Decimation), dsp.MakeLowPass(1, float64(srate), float64(d.circuitSampleRate/2)-xritConf.LowPassTransitionWidth/2, xritConf.LowPassTransitionWidth))
 	d.CostasLoop = dsp.MakeCostasLoop2(xritConf.PLLAlpha)
@@ -80,10 +69,10 @@ func (d *Demodulator) Start() {
 	for {
 		select {
 		case samples := <-d.SampleInput:
-			log.Debugf("[demod]: Got %d samples ", len(samples))
+			//log.Infof("[demod]: Got %d samples ", len(samples))
 			d.demodBlock(samples)
 		default:
-			log.Debugf("Underflow")
+			time.Sleep(time.Millisecond)
 		}
 	}
 }
@@ -97,95 +86,71 @@ func swapAndTrim(a *[]complex64, b *[]complex64, length int) {
 	*a = c
 }
 
-func dumpSamples(samples []complex64) {
+func DumpSamples(samples []complex64) {
 	for _, val := range samples {
 		fmt.Printf("%f %f\n", real(val), imag(val))
 	}
 }
 
-func (d *Demodulator) checkAndResizeBuffers(length int) {
-	if len(d.WorkBuffer0) < length {
-		d.WorkBuffer0 = make([]complex64, length)
-	}
-
-	if len(d.WorkBuffer1) < length {
-		d.WorkBuffer1 = make([]complex64, length)
-	}
-}
-
 func (d *Demodulator) demodBlock(samples []complex64) {
 	length := len(samples)
+	input := make([]complex64, length)
 
 	if length <= 64*1024 {
 		log.Errorf("[demod] samples length is %d, not >= %d. Bailing!", length, 64*1024)
 		return
 	}
 
-	d.checkAndResizeBuffers(length)
-
 	//Populate our workbuffer0
 	for idx, sample := range samples {
-		d.WorkBuffer0[idx] = sample
+		input[idx] = sample
 	}
-
-	ban := d.WorkBuffer0
-	bbn := d.WorkBuffer1
-	ba := &ban[0]
-	bb := &bbn[0]
 
 	if d.decimFactor > 1 {
 		log.Debugf("[demod] Running Decimator")
-		length = d.Decimator.WorkBuffer(ban, bbn)
-		swapAndTrim(&ban, &bbn, length)
-		ba = &ban[0]
-		bb = &bbn[0]
+		input = d.Decimator.Work(input)
 	}
 
 	//Apply AGC
 	log.Debugf("[demod] Applying AGC")
-	d.SHAGC.Work(ba, bb, length)
-	swapAndTrim(&ban, &bbn, length)
+	out := make([]complex64, length)
+	d.AGC.Work(&input[0], &out[0], length)
+	out = out[:length]
+	//out := d.AGC.Work(input)
 
 	//Apply Filter
 	log.Debugf("[demod] Applying RRC Filter")
-	length = d.RRCFilter.WorkBuffer(ban, bbn)
-	swapAndTrim(&ban, &bbn, length)
+	out = d.RRCFilter.Work(out)
 
 	//Frequency Sync
 	log.Debugf("[demod] Running Costas Loop")
-	length = d.CostasLoop.WorkBuffer(ban, bbn)
-	swapAndTrim(&ban, &bbn, length)
-	ba = &ban[0]
-	bb = &bbn[0]
+	out = d.CostasLoop.Work(out)
 
 	//Clock Sync
 	log.Debugf("[demod] Running Clock Sync (length: %d, mu: %f, omega: %f)", length, d.ClockRecovery.GetMu(), d.ClockRecovery.GetOmega())
-	numSymbols := d.ClockRecovery.Work(ba, bb, length)
-	//numSymbols := d.ClockRecovery.WorkBuffer(ban, bbn)
-	swapAndTrim(&ban, &bbn, length)
-	ba = &ban[0]
+	syncd := make([]complex64, len(out))
+	numSymbols := d.ClockRecovery.Work(&out[0], &syncd[0], len(out))
 
+	symbols := d.processSymbols(syncd, numSymbols)
+
+	d.SymbolsOutput <- symbols
+}
+
+func (d *Demodulator) processSymbols(ob []complex64, numSymbols int) []byte {
 	log.Debugf("[demod] Processing symbols")
-	var ob *[]complex64
-
-	if ba == &d.WorkBuffer0[0] {
-		ob = &d.WorkBuffer0
-	} else {
-		ob = &d.WorkBuffer1
-	}
 
 	symbols := make([]byte, numSymbols)
 	for i := 0; i < numSymbols; i++ {
-		z := (*ob)[i]
-		v := real(z) * 127
-		if v > 127 {
-			v = 127
-		} else if v < -128 {
-			v = -128
+		val := ob[i]
+		sym := real(val) * 127
+		if sym > 127 {
+			sym = 127
+		} else if sym < -128 {
+			sym = -128
 		}
-		symbols[i] = byte(v)
+		symbols[i] = byte(sym)
 	}
-	d.SymbolsOutput <- symbols
+	return symbols
 }
 
 func (d *Demodulator) Close() {
