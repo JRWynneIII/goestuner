@@ -56,7 +56,7 @@ type Decoder struct {
 	PacketFixer               SatHelper.PacketFixer
 	SyncWord                  []byte
 	EncodedFrameSize          int
-	DefaultFlywheelRecheck    int
+	MaxRecheckThreshold       int
 	MinCorrelationBits        uint
 	FrameSize                 int
 	SyncWordSize              int
@@ -106,7 +106,7 @@ func New(bufsize uint, configFile *koanf.Koanf) *Decoder {
 		Correlator:               SatHelper.NewCorrelator(),
 		PacketFixer:              SatHelper.NewPacketFixer(),
 		EncodedFrameSize:         encodedFrameSize,
-		DefaultFlywheelRecheck:   100,
+		MaxRecheckThreshold:      100,
 		MinCorrelationBits:       46,
 		FrameSize:                xritConf.FrameSize,
 		SyncWordSize:             4,
@@ -131,17 +131,11 @@ func New(bufsize uint, configFile *koanf.Koanf) *Decoder {
 	return &d
 }
 
-func shiftWithConstantSize(arr *[]byte, pos int, length int) {
-	for i := 0; i < length-pos; i++ {
-		(*arr)[i] = (*arr)[pos+i]
-	}
-}
-
 func (d *Decoder) Start() {
 	var isCorrupted bool
-	LastFrameOk := false
+	lastFrameOk := false
 
-	flywheelCount := 0
+	recheckCounter := 0
 	for {
 		//This is the meat and potatoes here. We should get our BER, SNR, and Sync status here
 		if len(d.SymbolsInput) >= d.EncodedFrameSize {
@@ -150,36 +144,37 @@ func (d *Decoder) Start() {
 				d.EncodedBytes[i] = <-d.SymbolsInput
 			}
 
-			if flywheelCount == d.DefaultFlywheelRecheck {
-				LastFrameOk = false
-				flywheelCount = 0
-			}
-
-			if !LastFrameOk {
-				//Try to lock
+			// Use the correlator to see where the sync words are in the frame, such that we know where the packet starts
+			// If we're not frame locked, or we've gotten a lot of good packets and should make sure were on the right
+			// track and not out of sync, then try to recorrelate, otherwise, don't try and recorrelate the whole frame
+			if !lastFrameOk || recheckCounter >= d.MaxRecheckThreshold {
 				d.Correlator.Correlate(&d.EncodedBytes[0], uint(d.EncodedFrameSize))
+				recheckCounter = 0
+				lastFrameOk = false
 			} else {
 				//If we're already locked
 				d.Correlator.Correlate(&d.EncodedBytes[0], uint(d.EncodedFrameSize/64))
 				if d.Correlator.GetHighestCorrelationPosition() != 0 {
-					//Lost lock
+					//Lost lock, so lets recorrelate the whole frame
 					d.Correlator.Correlate(&d.EncodedBytes[0], uint(d.EncodedFrameSize))
-					flywheelCount = 0
+					recheckCounter = 0
 				}
 			}
-			flywheelCount++
+			recheckCounter++
 
-			pos := d.Correlator.GetHighestCorrelationPosition()
-			corr := d.Correlator.GetHighestCorrelation()
-
-			if corr < d.MinCorrelationBits {
-				log.Debugf("Correlation did not meet criteria: have: %d, want: %d", corr, d.MinCorrelationBits)
-				LastFrameOk = false
+			// Check to make sure we actually got enough data that contains a packet/frame
+			if correlation := d.Correlator.GetHighestCorrelation(); correlation < d.MinCorrelationBits {
+				log.Debugf("Correlation did not meet criteria: have: %d, want: %d", correlation, d.MinCorrelationBits)
+				lastFrameOk = false
 				continue
 			}
 
-			if pos != 0 {
-				shiftWithConstantSize(&d.EncodedBytes, int(pos), d.EncodedFrameSize)
+			// Get the beginning of th epacket and shift things to start there
+			if pos := d.Correlator.GetHighestCorrelationPosition(); pos != 0 {
+				// Shift buffer to realign the frame to where the correlator says the frame begins
+				copy(d.EncodedBytes[:d.EncodedFrameSize-int(pos)], d.EncodedBytes[int(pos):d.EncodedFrameSize])
+
+				// Backfill bytes from the input channel to make a full frame
 				offset := uint(d.EncodedFrameSize) - pos
 				for i := offset; i < uint(d.EncodedFrameSize); i++ {
 					d.EncodedBytes[i] = <-d.SymbolsInput
@@ -187,48 +182,54 @@ func (d *Decoder) Start() {
 				}
 			}
 
-			//Prepend the remaining bits from last chunk to vit data so we hopefully get a full packet?
+			// Prepend the remaining bits from last chunk to vit data so that the viterbi problem space is larger
+			// And therefore more likely to get a lock/decode
 			copy(d.ViterbiBytes[:d.LastFrameSizeBits], d.LastFrameEnd[:d.LastFrameSizeBits])
-			for i := d.LastFrameSizeBits; i < d.LastFrameSizeBits+d.EncodedFrameSize; i++ {
-				d.ViterbiBytes[i] = d.EncodedBytes[i-d.LastFrameSizeBits]
-			}
+			copy(d.ViterbiBytes[d.LastFrameSizeBits:], d.EncodedBytes[:d.EncodedFrameSize])
 
 			d.Viterbi.Decode(&d.ViterbiBytes[0], &d.DecodedBytes[0])
 
-			nzrmDecodeSize := d.FrameSize + d.LastFrameSizeBytes
-			SatHelper.DifferentialEncodingNrzmDecode(&d.DecodedBytes[0], nzrmDecodeSize)
+			// Lets do our differential decode now
+			SatHelper.DifferentialEncodingNrzmDecode(&d.DecodedBytes[0], d.FrameSize+d.LastFrameSizeBytes)
 
-			BER := d.Viterbi.GetBER()
-			BER -= d.LastFrameSizeBits / 2
-
+			// Track bit error rate
+			BER := d.Viterbi.GetBER() - (d.LastFrameSizeBits / 2)
 			if BER < 0 {
 				BER = 0
 			}
+			d.AvgVitCorrections += float32(BER)
 
-			signalQuality := 100 * ((float32(d.MaxVitErrors) - float32(BER)) / float32(d.MaxVitErrors))
-			if signalQuality > 100 {
-				signalQuality = 100
-			} else if signalQuality < 0 {
-				signalQuality = 0
+			// Calculate our 'signal quality' percentage based upon the bit error rate
+			// TODO: Maybe we need to use the average viterbi corrections here instead of BER...
+			d.SigQuality = 100 * ((float32(d.MaxVitErrors) - float32(BER)) / float32(d.MaxVitErrors))
+			if d.SigQuality > 100 {
+				d.SigQuality = 100
+			} else if d.SigQuality < 0 {
+				d.SigQuality = 0
 			}
 
-			d.SigQuality = signalQuality
+			// Shift the decoded bytes to cut out half of the 'last frame' bytes
+			// NOTE: not exactly sure why we do that, but it has something to do with incorporating the previous frame's
+			// 	 bytes into things
+			copy(d.DecodedBytes[:(d.FrameSize+d.LastFrameSizeBytes/2)-(d.LastFrameSizeBytes/2)], d.DecodedBytes[(d.LastFrameSizeBytes/2):(d.FrameSize+d.LastFrameSizeBytes/2)])
 
-			d.AvgVitCorrections += float32(BER)
-			shiftWithConstantSize(&d.DecodedBytes, d.LastFrameSizeBytes/2, d.FrameSize+d.LastFrameSizeBytes/2)
-
+			// Keep the last viterbi encoded bytes from this packet so that we can expand our problem space for the next
+			// packet's viterbi decode
+			// My understanding is this allows us to have a better chance at the viterbi decode working
 			copy(d.LastFrameEnd[:d.LastFrameSizeBits], d.ViterbiBytes[d.EncodedFrameSize:d.EncodedFrameSize+d.LastFrameSizeBits])
+			// Get the next sync words from the decoded frame.
 			copy(d.SyncWord[:d.SyncWordSize], d.DecodedBytes[:d.SyncWordSize])
 
-			shiftWithConstantSize(&d.DecodedBytes, d.SyncWordSize, d.FrameSize-d.SyncWordSize)
+			// Shift the decoded bytes to remove the sync words, so we should just have a clean packet frame now
+			copy(d.DecodedBytes[:(d.FrameSize-d.SyncWordSize)-d.SyncWordSize], d.DecodedBytes[d.SyncWordSize:(d.FrameSize-d.SyncWordSize)])
 
+			// NOTE: I'm honestly not sure what this does, but its important...
 			SatHelper.DeRandomizerDeRandomize(&d.DecodedBytes[0], d.FrameSize-d.SyncWordSize)
 
 			//Reed Solomon Time
 			derrors := make([]int32, d.RsBlocks)
 			totalBytesFixed := int32(0)
 
-			packetCorrected := false
 			for i := 0; i < int(d.RsBlocks); i++ {
 				d.ReedSolomon.Deinterleave(&d.DecodedBytes[0], &d.RSWorkBuffer[0], byte(i), d.RsBlocks)
 				derrors[i] = int32(int8(d.ReedSolomon.Decode_ccsds(&d.RSWorkBuffer[0])))
@@ -240,23 +241,19 @@ func (d *Decoder) Start() {
 				}
 				if derrors[i] > -1 {
 					totalBytesFixed += derrors[i]
-					packetCorrected = true
 				}
-			}
-			if packetCorrected {
-				log.Info("Reed-Soloman corrected packet!")
 			}
 
 			d.TotalFramesProcessed++
 
 			if derrors[0] == -1 && derrors[1] == -1 && derrors[2] == -1 && derrors[3] == -1 {
-				// Packet is corrupt; sadface
+				// Packet is corrupt; :sadpanda:
 				isCorrupted = true
-				LastFrameOk = false
+				lastFrameOk = false
 			} else {
 				// Got a good packet! lets go!
 				isCorrupted = false
-				LastFrameOk = true
+				lastFrameOk = true
 			}
 
 			// Spacecraft ID (TODO: This seems to always be 0 for some reason?)
@@ -272,7 +269,10 @@ func (d *Decoder) Start() {
 
 			if !isCorrupted {
 				d.FrameLock = true
-				log.Infof("Got frame: vcid: %d (%s) scid: %d counter: %d", int(vcid), VCIDs[int(vcid)], scid, counter)
+				log.Infof("Got frame: vcid: %d (%s) scid: %d object number: %d", int(vcid), VCIDs[int(vcid)], scid, counter)
+				if totalBytesFixed > 0 {
+					log.Infof("Parity corrected %d bytes from last packet", totalBytesFixed)
+				}
 				d.RxPacketsPerChannel[int(vcid)]++
 			} else {
 				d.DroppedPacketsPerChannel[int(vcid)]++
