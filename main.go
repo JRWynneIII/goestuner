@@ -25,6 +25,7 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	}
 
+	//TODO: Allow the config file to live in /etc or ~/.config/goestuner
 	if err := configFile.Load(file.Provider("./config.hcl"), hcl.Parser(true)); err != nil {
 		log.Fatalf("Could not read config file: %s", err.Error())
 	}

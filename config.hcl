@@ -1,8 +1,3 @@
-common {
-  loglevel = "debug" // "debug" | "info" | "error"
-  data_path = "/tmp/goeswatcher"
-}
-
 radio  {
   driver = "rtltcp"
   address = "10.0.0.83:1234"
@@ -14,6 +9,26 @@ radio  {
   decimation = 1
 }
 
+tui {
+  refresh_ms = 500
+  rs_threshold_warn_pct = 20
+  rs_threshold_crit_pct = 25
+  vit_threshold_warn_pct = 10
+  vit_threshold_crit_pct = 15
+  enable_log_output = true
+}
+
+//radio  {
+//  driver = "rtlsdr"
+//  device_index = 0
+//  gain = 5
+//  frequency = 107700000
+//  sample_rate = 2400000
+//  sample_type = "complex64"
+//}
+
+
+// Do not touch the settings below unless you know what you're doing!
 agc {
   rate = 0.01
   reference = 0.5
@@ -47,25 +62,3 @@ viterbi {
   max_errors = 500
 }
 
-tui {
-  refresh_ms = 500
-  rs_threshold_warn_pct = 20
-  rs_threshold_crit_pct = 25
-  vit_threshold_warn_pct = 10
-  vit_threshold_crit_pct = 15
-  enable_log_output = true
-}
-
-
-//radio  {
-//  driver = "rtlsdr"
-//  device_index = 0
-//  gain = 5
-//  frequency = 107700000
-//  sample_rate = 2400000
-//  sample_type = "complex64"
-//}
-
-debug {
-  save_data = false
-}
