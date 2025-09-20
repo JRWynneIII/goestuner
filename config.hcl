@@ -35,12 +35,12 @@ xrit {
   pll_alpha = 0.001
   decimation_factor = 1
   chunk_size = 66560
+  do_fft = false
 }
 
 xrit_frame {
   frame_size = 1024
   last_frame_size = 8
-  do_fft = false
 }
 
 viterbi {
