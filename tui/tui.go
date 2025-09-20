@@ -90,7 +90,7 @@ func StartUI(decoder *decode.Decoder, demodulator *demod.Demodulator, enableFFT 
 	page := tview.NewFlex().SetDirection(tview.FlexColumn)
 
 	leftCol := tview.NewFlex().SetDirection(tview.FlexRow)
-	leftCol.AddItem(channelStats, 0, 3, false)
+	leftCol.AddItem(channelStats, 0, 6, false)
 	leftCol.AddItem(decoderStats, 0, 1, false)
 
 	rightCol := tview.NewFlex().SetDirection(tview.FlexRow)
