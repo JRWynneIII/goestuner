@@ -2,6 +2,8 @@
 
 `goestuner` is a simple CLI tool that can be used to help orient your parabolic dish with one of the GOES satellites. Think of it as a simple 'signal strength meter' for GOES/HRIT satellites. 
 
+![Screenshot of goestuner running](docs/tui.png)
+
 ### Dependencies
 * SoapySDR and any required module (e.g. SoapyRTLTCP for RTL_TCP)
 * `libsathelper`: See [here](https://github.com/opensatelliteproject/libsathelper/blob/master/README.md) for build and installation instructions
@@ -23,8 +25,26 @@ go install github.com/jrwynneiii/goestuner@latest
 ```
 
 ### Usage
-TBD
+```
+Usage: goestuner <command> [flags]
+
+Flags:
+  -h, --help       Show context-sensitive help.
+      --verbose    Prints debug output by default
+
+Commands:
+  probe [flags]
+    List the available radios and SoapySDR configuration
+
+  tune [flags]
+    Starts the frontend webserver
+
+Run "goestuner <command> --help" for more information on a command.
+```
+
+* `probe`: Queries SoapySDR to list the available SDRs and their respctive settings (NOTE: Does not show anything for `rtl_tcp` devices)
+* `tune`: Starts the HRIT demodulator/decoder and TUI.
 
 ### Acknowledgements:
 
-I'd like to thank the [Open Satellite Project](https://github.com/opensatelliteproject) for creating `libsathelper`, and `SatHelperApp`; these two projects were extremely helpful in the development of this tool, and served, not only as a good basis to start development of `goestuner`, but as a wonderful reference for learning various concepts about SDR and xRIT programming. 
+I'd like to thank the [Open Satellite Project](https://github.com/opensatelliteproject) for creating `libsathelper`, and `SatHelperApp`; these two projects were extremely helpful in the development of the demodulator and decoder, and served, not only as a good reference point for development of `goestuner`, but as a wonderful reference for learning various concepts about SDR and xRIT programming. 
