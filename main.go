@@ -19,6 +19,7 @@ import (
 var configFile = koanf.New(".")
 
 func main() {
+	log.Info("Starting GOESWatcher")
 	flags := kong.Parse(&cli)
 	if cli.Verbose {
 		log.SetLevel(log.DebugLevel)
@@ -29,8 +30,10 @@ func main() {
 	}
 
 	switch flags.Command() {
+	case "probe":
+		radio.LogAllSoapySDRDevices()
+
 	case "tune":
-		log.Info("Starting GOESWatcher")
 		rname := configFile.String("radio.driver")
 
 		var rdef config.RadioConf
@@ -40,29 +43,9 @@ func main() {
 		configFile.Unmarshal("xrit", &xritDef)
 		configFile.Unmarshal("tui", &tuiDef)
 
-		log.Infof("Found radio definition for %s: %##v", rname, rdef)
-		log.Info("Starting init of SDR")
+		log.Debugf("Found radio definition for %s: %##v", rname, rdef)
+		log.Debug("Starting init of SDR")
 		switch rdef.SampleType {
-		//	case "uint8":
-		//		r := radio.New[uint8](rdef, rname, radio.CU8, xritDef.ChunkSize)
-		//		r.Connect()
-		//		r.Read(100)
-		//		r.Destroy()
-		//	case "int8":
-		//		r := radio.New[int8](rdef, rname, radio.CS8, xritDef.ChunkSize)
-		//		r.Connect()
-		//		log.Debugf("%##v", r.Read(100))
-		//		r.Destroy()
-		//	case "uint16":
-		//		r := radio.New[uint16](rdef, rname, radio.CU16, xritDef.ChunkSize)
-		//		r.Connect()
-		//		r.Read(100)
-		//		r.Destroy()
-		//	case "int16":
-		//		r := radio.New[int16](rdef, rname, radio.CS16, xritDef.ChunkSize)
-		//		r.Connect()
-		//		r.Read(100)
-		//		r.Destroy()
 		case "complex64":
 			if len(cli.Tune.File) == 0 {
 				r := radio.New[complex64](rdef, rname, radio.CF32, xritDef.ChunkSize)
@@ -91,11 +74,6 @@ func main() {
 				tui.StartUI(decoder, demodulator, xritDef.DoFFT, tuiDef)
 				log.SetOutput(tui.LogOut)
 			}
-			//	case "complex128":
-			//		r := radio.New[complex128](rdef, rname, radio.CF64, xritDef.ChunkSize)
-			//		r.Connect()
-			//		r.Read(100)
-			//		r.Destroy()
 		default:
 			log.Fatalf("Unsupported sample_type defined for radio %s\n Supported sample types are: [CF32]", rname)
 		}
