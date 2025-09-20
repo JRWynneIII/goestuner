@@ -1,6 +1,6 @@
 # GOESTuner
 
-`goestuner` is a simple CLI tool that can be used to help orient your parabolic dish with one of the GOES satellites. Think of it as a simple 'signal strength meter' for GOES/HRIT satellites. 
+`goestuner` is a simple CLI tool that can be used to help orient your parabolic dish with one of the GOES satellites. Think of it as a simple 'signal strength meter' for GOES/HRIT satellites, with large signal strength bars that are easier to see on a screen in sunlight. 
 
 ![Screenshot of goestuner running](docs/tui.png)
 
