@@ -1,7 +1,7 @@
 package demod
 
 import (
-	"fmt"
+	"math"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -10,12 +10,14 @@ import (
 	"github.com/knadh/koanf/v2"
 	SatHelper "github.com/opensatelliteproject/libsathelper"
 	"github.com/racerxdl/segdsp/dsp"
+	"github.com/racerxdl/segdsp/tools"
+	"gonum.org/v1/gonum/dsp/fourier"
 )
 
 type Demodulator struct {
 	SampleInput       chan []complex64
 	SampleType        radio.StreamType
-	SymbolsOutput     chan []uint8
+	SymbolsOutput     *chan byte
 	bufferSize        uint
 	circuitSampleRate float32
 	deviceSampleRate  float32
@@ -28,29 +30,32 @@ type Demodulator struct {
 	RRCFilter         *dsp.FirFilter
 	Decimator         *dsp.FirFilter
 	CostasLoop        dsp.CostasLoop
+	CurrentFFT        []float64
+	DoFFT             bool
 }
 
-func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.Koanf) *Demodulator {
+func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.Koanf, decoderInput *chan byte) *Demodulator {
 	var xritConf config.XRITConf
 	var agcConf config.AGCConf
 	var clockConf config.ClockRecoveryConf
 	configFile.Unmarshal("xrit", &xritConf)
 	configFile.Unmarshal("agc", &agcConf)
 	configFile.Unmarshal("clock_recovery", &clockConf)
-	log.Infof("Found xrit definition: %##v", xritConf)
-	log.Infof("Found agc definition: %##v", agcConf)
-	log.Infof("Found clock_recovery definition: %##v", clockConf)
+	log.Debugf("Found xrit definition: %##v", xritConf)
+	log.Debugf("Found agc definition: %##v", agcConf)
+	log.Debugf("Found clock_recovery definition: %##v", clockConf)
 
 	d := Demodulator{
 		SampleInput:       make(chan []complex64, bufsize),
 		SampleType:        stype,
-		SymbolsOutput:     make(chan []byte, bufsize),
+		SymbolsOutput:     decoderInput,
 		bufferSize:        bufsize,
 		deviceSampleRate:  srate,
 		circuitSampleRate: float32(srate) / float32(xritConf.Decimation),
 		decimFactor:       xritConf.Decimation,
 		sampleChunkSize:   int(xritConf.ChunkSize),
 		gainOmega:         float32((clockConf.Alpha * clockConf.Alpha) / 4.0),
+		DoFFT:             xritConf.DoFFT,
 	}
 	d.sps = d.circuitSampleRate / float32(xritConf.SymbolRate)
 
@@ -65,30 +70,45 @@ func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.
 	return &d
 }
 
+func (d *Demodulator) doFFT(samples []complex64) {
+	var input []complex128
+
+	for idx, sample := range samples {
+		if idx%300 == 0 {
+			input = append(input, complex128(sample))
+		}
+	}
+
+	fft := fourier.NewCmplxFFT(len(input))
+	coeff := fft.Coefficients(nil, input)
+
+	var output []float64
+	for i := range coeff {
+		i = fft.ShiftIdx(i)
+		v := tools.ComplexAbsSquared(complex64(coeff[i])) // * (1.0 / d.circuitSampleRate)
+		v = float32(10.0 * math.Log10(float64(v)))
+		output = append(output, float64(v))
+	}
+
+	d.CurrentFFT = output
+
+	// fft_samples := fft.FFT(samples)
+	// d.CurrentFFT = []float64{}
+	//
+	//	for _, sample := range fft_samples {
+	//		value := 10 * math.Log10(float64(tools.ComplexAbsSquared(sample)))
+	//		d.CurrentFFT = append(d.CurrentFFT, value)
+	//	}
+}
+
 func (d *Demodulator) Start() {
 	for {
 		select {
 		case samples := <-d.SampleInput:
-			//log.Infof("[demod]: Got %d samples ", len(samples))
 			d.demodBlock(samples)
 		default:
 			time.Sleep(time.Millisecond)
 		}
-	}
-}
-
-func swapAndTrim(a *[]complex64, b *[]complex64, length int) {
-	*a = (*a)[:length]
-	*b = (*b)[:length]
-
-	c := *b
-	*b = *a
-	*a = c
-}
-
-func DumpSamples(samples []complex64) {
-	for _, val := range samples {
-		fmt.Printf("%f %f\n", real(val), imag(val))
 	}
 }
 
@@ -97,7 +117,6 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 	input := make([]complex64, length)
 
 	if length <= 64*1024 {
-		log.Errorf("[demod] samples length is %d, not >= %d. Bailing!", length, 64*1024)
 		return
 	}
 
@@ -110,13 +129,15 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 		log.Debugf("[demod] Running Decimator")
 		input = d.Decimator.Work(input)
 	}
+	if d.DoFFT {
+		d.doFFT(input)
+	}
 
 	//Apply AGC
 	log.Debugf("[demod] Applying AGC")
 	out := make([]complex64, length)
 	d.AGC.Work(&input[0], &out[0], length)
 	out = out[:length]
-	//out := d.AGC.Work(input)
 
 	//Apply Filter
 	log.Debugf("[demod] Applying RRC Filter")
@@ -133,7 +154,9 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 
 	symbols := d.processSymbols(syncd, numSymbols)
 
-	d.SymbolsOutput <- symbols
+	for _, symbol := range symbols {
+		*d.SymbolsOutput <- symbol
+	}
 }
 
 func (d *Demodulator) processSymbols(ob []complex64, numSymbols int) []byte {
@@ -155,5 +178,4 @@ func (d *Demodulator) processSymbols(ob []complex64, numSymbols int) []byte {
 
 func (d *Demodulator) Close() {
 	close(d.SampleInput)
-	close(d.SymbolsOutput)
 }

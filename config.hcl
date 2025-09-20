@@ -40,10 +40,20 @@ xrit {
 xrit_frame {
   frame_size = 1024
   last_frame_size = 8
+  do_fft = false
 }
 
 viterbi {
   max_errors = 500
+}
+
+tui {
+  refresh_ms = 500
+  rs_threshold_warn_pct = 20
+  rs_threshold_crit_pct = 25
+  vit_threshold_warn_pct = 10
+  vit_threshold_crit_pct = 15
+  enable_log_output = true
 }
 
 

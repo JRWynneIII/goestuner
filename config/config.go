@@ -31,6 +31,7 @@ type XRITConf struct {
 	PLLAlpha               float32 `koanf:"pll_alpha"`
 	Decimation             int     `koanf:"decimation_factor"`
 	ChunkSize              uint    `koanf:"chunk_size"`
+	DoFFT                  bool    `koanf:"do_fft"`
 }
 
 type XRITFrameConf struct {
@@ -40,4 +41,13 @@ type XRITFrameConf struct {
 
 type ViterbiConf struct {
 	MaxErrors int `koanf:"max_errors"`
+}
+
+type TuiConf struct {
+	RefreshMs       int     `koanf:"refresh_ms"`
+	RsWarnPct       float64 `koanf:"rs_threshold_warn_pct"`
+	RsCritPct       float64 `koanf:"rs_threshold_crit_pct"`
+	VitWarnPct      float64 `koanf:"vit_threshold_warn_pct"`
+	VitCritPct      float64 `koanf:"vit_threshold_crit_pct"`
+	EnableLogOutput bool    `koanf:"enable_log_output"`
 }
