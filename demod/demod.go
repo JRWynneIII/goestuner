@@ -35,12 +35,28 @@ type Demodulator struct {
 }
 
 func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.Koanf, decoderInput *chan byte) *Demodulator {
-	var xritConf config.XRITConf
-	var agcConf config.AGCConf
-	var clockConf config.ClockRecoveryConf
-	configFile.Unmarshal("xrit", &xritConf)
-	configFile.Unmarshal("agc", &agcConf)
-	configFile.Unmarshal("clock_recovery", &clockConf)
+	xritConf := config.XRITConf{
+		SymbolRate:             configFile.Float64("xrit.symbol_rate"),
+		RRCAlpha:               configFile.Float64("xrit.rrc_alpha"),
+		RRCTaps:                configFile.Int("xrit.rrc_taps"),
+		LowPassTransitionWidth: configFile.Float64("xrit.lowpass_transition_width"),
+		PLLAlpha:               float32(configFile.Float64("xrit.pll_alpha")),
+		Decimation:             configFile.Int("xrit.decimation_factor"),
+		ChunkSize:              uint(configFile.Int("xrit.chunk_size")),
+		DoFFT:                  configFile.Bool("xrit.do_fft"),
+	}
+	agcConf := config.AGCConf{
+		Rate:      float32(configFile.Float64("agc.rate")),
+		Reference: float32(configFile.Float64("agc.reference")),
+		Gain:      float32(configFile.Float64("agc.gain")),
+		MaxGain:   float32(configFile.Float64("agc.max_gain")),
+	}
+	clockConf := config.ClockRecoveryConf{
+		Mu:         float32(configFile.Float64("clockrecovery.mu")),
+		Alpha:      float32(configFile.Float64("clockrecovery.alpha")),
+		OmegaLimit: float32(configFile.Float64("clockrecovery.omega_limit")),
+	}
+
 	log.Debugf("Found xrit definition: %##v", xritConf)
 	log.Debugf("Found agc definition: %##v", agcConf)
 	log.Debugf("Found clock_recovery definition: %##v", clockConf)

@@ -75,11 +75,13 @@ func (d *Decoder) Close() {
 }
 
 func New(bufsize uint, configFile *koanf.Koanf) *Decoder {
-	var vitConf config.ViterbiConf
-	var xritConf config.XRITFrameConf
-
-	configFile.Unmarshal("viterbi", &vitConf)
-	configFile.Unmarshal("xrit_frame", &xritConf)
+	vitConf := config.ViterbiConf{
+		MaxErrors: configFile.Int("viterbi.max_errors"),
+	}
+	xritConf := config.XRITFrameConf{
+		FrameSize:     configFile.Int("xritframe.frame_size"),
+		LastFrameSize: configFile.Int("xritframe.last_frame_size"),
+	}
 
 	frameSizeBits := xritConf.FrameSize * 8
 	encodedFrameSize := frameSizeBits * 2

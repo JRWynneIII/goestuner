@@ -7,6 +7,7 @@ require (
 	github.com/charmbracelet/log v0.4.2
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/knadh/koanf/parsers/hcl v1.0.0
+	github.com/knadh/koanf/providers/env/v2 v2.0.0
 	github.com/knadh/koanf/providers/file v1.2.0
 	github.com/knadh/koanf/v2 v2.2.2
 	github.com/navidys/tvxwidgets v0.11.3

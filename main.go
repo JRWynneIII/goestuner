@@ -1,6 +1,10 @@
 package main
 
 import (
+	"errors"
+	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/alecthomas/kong"
@@ -12,11 +16,24 @@ import (
 	"github.com/jrwynneiii/goestuner/tui"
 
 	"github.com/knadh/koanf/parsers/hcl"
+	"github.com/knadh/koanf/providers/env/v2"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 )
 
 var configFile = koanf.New(".")
+
+func getConfigPath() string {
+	paths := []string{"/etc/goestuner/config.hcl", "~/.config/goestuner/config.hcl", "./config.hcl"}
+	for _, path := range paths {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			log.Infof("Found config file: %s", path)
+			return path
+		}
+	}
+	log.Info("Config file not found!")
+	return ""
+}
 
 func main() {
 	log.Info("Starting GOESWatcher")
@@ -25,9 +42,20 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	//TODO: Allow the config file to live in /etc or ~/.config/goestuner
-	if err := configFile.Load(file.Provider("./config.hcl"), hcl.Parser(true)); err != nil {
-		log.Fatalf("Could not read config file: %s", err.Error())
+	if err := configFile.Load(file.Provider(getConfigPath()), hcl.Parser(true)); err != nil {
+		log.Errorf("Could not read config file: %v", err)
+		log.Error("Attempting to use environment variables")
+		configFile.Load(env.Provider("", env.Opt{
+			Prefix: "GOESTUNER_",
+			TransformFunc: func(k, v string) (string, any) {
+				key := strings.ToLower(strings.TrimPrefix(k, "GOESTUNER_"))
+				k = strings.Replace(key, "_", ".", 1)
+				fmt.Printf("Found config env var: %s=%v\n", k, v)
+				return k, v
+			},
+		}), nil)
+		fmt.Println(configFile)
+
 	}
 
 	switch flags.Command() {
@@ -37,23 +65,36 @@ func main() {
 	case "tune":
 		rname := configFile.String("radio.driver")
 
-		var rdef config.RadioConf
-		var xritDef config.XRITConf
-		var tuiDef config.TuiConf
-		configFile.Unmarshal("radio", &rdef)
-		configFile.Unmarshal("xrit", &xritDef)
-		configFile.Unmarshal("tui", &tuiDef)
+		rdef := config.RadioConf{
+			Address:     configFile.String("radio.address"),
+			DeviceIndex: configFile.Int("radio.device_index"),
+			Gain:        configFile.Int("radio.gain"),
+			Frequency:   configFile.Float64("radio.frequency"),
+			SampleRate:  configFile.Float64("radio.sample_rate"),
+			SampleType:  configFile.String("radio.sample_type"),
+			Decimation:  configFile.String("radio.decimation"),
+		}
+		tuiDef := config.TuiConf{
+			RefreshMs:       configFile.Int("tui.refresh_ms"),
+			RsWarnPct:       configFile.Float64("tui.rs_threshold_warn_pct"),
+			RsCritPct:       configFile.Float64("tui.rs_threshold_crit_pct"),
+			VitWarnPct:      configFile.Float64("tui.vit_threshold_warn_pct"),
+			VitCritPct:      configFile.Float64("tui.vit_threshold_crit_pct"),
+			EnableLogOutput: configFile.Bool("tui.enable_log_output"),
+		}
+		xritChunkSize := uint(configFile.Int("xrit.chunk_size"))
+		xritDoFFT := configFile.Bool("xrit.do_fft")
 
 		log.Debugf("Found radio definition for %s: %##v", rname, rdef)
 		log.Debug("Starting init of SDR")
 		switch rdef.SampleType {
 		case "complex64":
 			if len(cli.Tune.File) == 0 {
-				r := radio.New[complex64](rdef, rname, radio.CF32, xritDef.ChunkSize)
+				r := radio.New[complex64](rdef, rname, radio.CF32, xritChunkSize)
 				r.Connect()
 				defer r.Destroy()
-				decoder := decode.New(xritDef.ChunkSize, configFile)
-				demodulator := demod.New(radio.CF32, float32(rdef.SampleRate), xritDef.ChunkSize, configFile, &decoder.SymbolsInput)
+				decoder := decode.New(xritChunkSize, configFile)
+				demodulator := demod.New(radio.CF32, float32(rdef.SampleRate), xritChunkSize, configFile, &decoder.SymbolsInput)
 				go demodulator.Start()
 				go decoder.Start()
 				defer demodulator.Close()
@@ -62,17 +103,17 @@ func main() {
 				go func() {
 					var buf []complex64
 					for {
-						samples := r.Read(xritDef.ChunkSize)
+						samples := r.Read(xritChunkSize)
 						buf = append(buf, samples.([]complex64)...)
 
-						if len(buf) >= int(xritDef.ChunkSize) {
+						if len(buf) >= int(xritChunkSize) {
 							demodulator.SampleInput <- buf
 							buf = []complex64{}
 						}
 						time.Sleep(5 * time.Millisecond)
 					}
 				}()
-				tui.StartUI(decoder, demodulator, xritDef.DoFFT, tuiDef)
+				tui.StartUI(decoder, demodulator, xritDoFFT, tuiDef)
 				log.SetOutput(tui.LogOut)
 			}
 		default:

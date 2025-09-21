@@ -36,7 +36,7 @@ agc {
   max_gain = 4000
 }
 
-clock_recovery {
+clockrecovery {
   mu = 0.5
   alpha = 0.0037
   omega_limit = 0.005
@@ -53,7 +53,7 @@ xrit {
   do_fft = false
 }
 
-xrit_frame {
+xritframe {
   frame_size = 1024
   last_frame_size = 8
 }
