@@ -1,0 +1,99 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5ce9697..b17efb6 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -46,8 +46,8 @@ message( STATUS "Architecture: ${ARCHITECTURE}" )
+ 
+ 
+ # Flags
+-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -fPIC -O3")
+-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -fPIC -O3")
++set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -O3")
++set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O3 -std=c++11")
+ 
+ if(${ARCHITECTURE} STREQUAL "aarch64")
+ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -funsafe-math-optimizations -mtune=cortex-a53 -ftree-vectorize")
+diff --git a/includes/SatHelper/exceptions/WordSizeException.h b/includes/SatHelper/exceptions/WordSizeException.h
+index 9da6383..2609da5 100644
+--- a/includes/SatHelper/exceptions/WordSizeException.h
++++ b/includes/SatHelper/exceptions/WordSizeException.h
+@@ -10,6 +10,7 @@
+ 
+ #include <sstream>
+ #include <SatHelper/exceptions/SatHelperException.h>
++#include <cstdint>
+ 
+ class WordSizeException: public SatHelperException {
+ public:
+diff --git a/includes/SatHelper/tools.h b/includes/SatHelper/tools.h
+index 65f82f5..1a9dfbe 100644
+--- a/includes/SatHelper/tools.h
++++ b/includes/SatHelper/tools.h
+@@ -11,6 +11,7 @@
+ #include <sys/stat.h>
+ #include <complex>
+ #include <cmath>
++#include <cstdint>
+ 
+ // MSVC will optmize to FMA if /arch:AVX2 /GL /O2 /fp:fast
+ #ifndef _WIN32
+diff --git a/tests/CorrelationTest.cpp b/tests/CorrelationTest.cpp
+index ae82b4a..6138c72 100644
+--- a/tests/CorrelationTest.cpp
++++ b/tests/CorrelationTest.cpp
+@@ -11,6 +11,7 @@
+ #include <cstring>
+ #include <random>
+ #include <SatHelper/correlator.h>
++#include <cstdint>
+ 
+ #define TEST_SIZE 1024
+ 
+diff --git a/tests/DerandomizerTest.cpp b/tests/DerandomizerTest.cpp
+index a0eebdb..3509360 100644
+--- a/tests/DerandomizerTest.cpp
++++ b/tests/DerandomizerTest.cpp
+@@ -9,6 +9,7 @@
+ #include <SatHelper/derandomizer.h>
+ #include <cstring>
+ #include <iostream>
++#include <cstdint>
+ 
+ namespace SatHelper {
+ #define TEST_SIZE 920
+diff --git a/tests/DerandomizerTest.h b/tests/DerandomizerTest.h
+index c62d9e2..4d5d055 100644
+--- a/tests/DerandomizerTest.h
++++ b/tests/DerandomizerTest.h
+@@ -9,6 +9,7 @@
+ #define TESTS_DERANDOMIZERTEST_H_
+ 
+ #include "BaseTest.h"
++#include <cstdint>
+ 
+ namespace SatHelper {
+ 
+diff --git a/tests/PacketFixerTest.cpp b/tests/PacketFixerTest.cpp
+index 3ebdb9b..8c56359 100644
+--- a/tests/PacketFixerTest.cpp
++++ b/tests/PacketFixerTest.cpp
+@@ -9,6 +9,7 @@
+ #include <SatHelper/packetfixer.h>
+ #include <cstring>
+ #include <iostream>
++#include <cstdint>
+ 
+ namespace SatHelper {
+ 
+diff --git a/tests/PacketFixerTest.h b/tests/PacketFixerTest.h
+index a0eaf4b..565b823 100644
+--- a/tests/PacketFixerTest.h
++++ b/tests/PacketFixerTest.h
+@@ -9,6 +9,7 @@
+ #define TESTS_PACKETFIXERTEST_H_
+ 
+ #include "BaseTest.h"
++#include <cstdint>
+ 
+ namespace SatHelper {
+ 

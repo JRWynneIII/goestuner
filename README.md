@@ -19,6 +19,37 @@ So far this tool has only been verified as working with the SDRs listed below, b
 
 ### Installation
 
+#### Raspberry Pi (Debian 13)
+
+Install dependencies:
+* `sudo apt install libsoapysdr-dev cmake build-essential`
+* Build `libsathelper`:
+  * `git clone https://github.com/opensatelliteproject/libsathelper`
+  * `cd libsathelper`
+  * `make libcorrect`
+  * `sudo make libcorrect-install`
+  * `make`
+  * `sudo make install`
+
+Once the dependencies are satisfied, you can simply install `goestuner` with `go install`:
+```
+go install github.com/jrwynneiii/goestuner@latest
+```
+
+#### Fedora 42+
+Install dependencies:
+* `sudo dnf install gcc g++ make cmake soapy-rtlsdr SoapySDR-devel SoapySDR `
+* Build `libsathelper`:
+  * `git clone https://github.com/opensatelliteproject/libsathelper`
+  * `cd libsathelper`
+  * Apply patch to allow libsathelper to be built with modern GCC
+    * `wget https://raw.githubusercontent.com/JRWynneIII/goestuner/refs/heads/main/libsathelper.patch ; git apply libsathelper.patch`
+  * `make libcorrect`
+  * `sudo make libcorrect-install`
+  * `make`
+  * `sudo make install`
+
+
 Once the dependencies are satisfied, you can simply install `goestuner` with `go install`:
 ```
 go install github.com/jrwynneiii/goestuner@latest
