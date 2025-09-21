@@ -82,6 +82,8 @@ Run "goestuner <command> --help" for more information on a command.
 
 The `goestuner` config file uses the [HashiCorp Configuration Language](https://hcl.readthedocs.io/en/latest/language_design.html) DSL. Included as `config.hcl`, the example configuration file should be enough to get you started. Most values will never need to be changed, except for the `radio {}` block. This contains the configuration that is used to tell SoapySDR which radio to use. Included in the config file is an example for an RTL-SDR dongle, and one for accessing an SDR over `rtl_tcp`.
 
+Additionally, `goestuner` has the ability to read configuration from environment variables. The same example configuration as is set in `config.hcl` is replicated in `config.sh`. Simply modify this file and run `source /path/to/config.sh ; goestuner tune` to utilize this feature
+
 #### Radio
 For example, if you have an RTL-SDR connected directly via USB, your `radio {}` block should look something like this:
 ```
