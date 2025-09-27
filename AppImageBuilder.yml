@@ -16,12 +16,8 @@ AppDir:
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-backports main restricted universe multiverse
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-security main restricted universe multiverse
     include:
-    - libSoapySDR
-    - libstdc++
-    - libm
-    - libmvec
-    - libgcc_s
-    - libc
+    - libsoapysdr-dev 
+    - soapysdr0.8-module-all
   test:
     fedora:
       image: appimagecrafters/tests-env:fedora-30
