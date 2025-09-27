@@ -4,6 +4,7 @@ AppDir:
   app_info:
     id: goestuner
     name: GOESTuner
+    icon: utilities-terminal
     version: latest
     exec: !ENV ${GITHUB_WORKSPACE}/goestuner
     exec_args: $@
