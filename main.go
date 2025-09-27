@@ -54,7 +54,6 @@ func main() {
 				return k, v
 			},
 		}), nil)
-		fmt.Println(configFile)
 
 	}
 

@@ -50,7 +50,7 @@ xrit {
   pll_alpha = 0.001
   decimation_factor = 1
   chunk_size = 66560
-  do_fft = false
+  do_fft = true
 }
 
 xritframe {

@@ -32,6 +32,7 @@ type Demodulator struct {
 	CostasLoop        dsp.CostasLoop
 	CurrentFFT        []float64
 	DoFFT             bool
+	FFTWorking        bool
 }
 
 func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.Koanf, decoderInput *chan byte) *Demodulator {
@@ -87,12 +88,11 @@ func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.
 }
 
 func (d *Demodulator) doFFT(samples []complex64) {
+	d.FFTWorking = true
 	var input []complex128
 
-	for idx, sample := range samples {
-		if idx%300 == 0 {
-			input = append(input, complex128(sample))
-		}
+	for _, sample := range samples {
+		input = append(input, complex128(sample))
 	}
 
 	fft := fourier.NewCmplxFFT(len(input))
@@ -100,21 +100,20 @@ func (d *Demodulator) doFFT(samples []complex64) {
 
 	var output []float64
 	for i := range coeff {
-		i = fft.ShiftIdx(i)
-		v := tools.ComplexAbsSquared(complex64(coeff[i])) // * (1.0 / d.circuitSampleRate)
-		v = float32(10.0 * math.Log10(float64(v)))
-		output = append(output, float64(v))
+		// Cut this down to a manageable size
+		if i%1000 == 0 {
+			i = fft.ShiftIdx(i)
+			v := tools.ComplexAbsSquared(complex64(coeff[i])) // * (1.0 / d.circuitSampleRate)
+			v = float32(10.0 * math.Log10(float64(v)))
+			if v > 0 {
+				output = append(output, float64(v))
+			}
+		}
 	}
 
 	d.CurrentFFT = output
-
-	// fft_samples := fft.FFT(samples)
-	// d.CurrentFFT = []float64{}
-	//
-	//	for _, sample := range fft_samples {
-	//		value := 10 * math.Log10(float64(tools.ComplexAbsSquared(sample)))
-	//		d.CurrentFFT = append(d.CurrentFFT, value)
-	//	}
+	time.Sleep(500 * time.Millisecond)
+	d.FFTWorking = false
 }
 
 func (d *Demodulator) Start() {
@@ -136,7 +135,6 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 		return
 	}
 
-	//Populate our workbuffer0
 	for idx, sample := range samples {
 		input[idx] = sample
 	}
@@ -144,9 +142,6 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 	if d.decimFactor > 1 {
 		log.Debugf("[demod] Running Decimator")
 		input = d.Decimator.Work(input)
-	}
-	if d.DoFFT {
-		d.doFFT(input)
 	}
 
 	//Apply AGC
@@ -167,6 +162,15 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 	log.Debugf("[demod] Running Clock Sync (length: %d, mu: %f, omega: %f)", length, d.ClockRecovery.GetMu(), d.ClockRecovery.GetOmega())
 	syncd := make([]complex64, len(out))
 	numSymbols := d.ClockRecovery.Work(&out[0], &syncd[0], len(out))
+
+	if d.DoFFT && !d.FFTWorking {
+		go d.doFFT(out)
+	}
+
+	//	for _, i := range out {
+	//		fmt.Printf("%f %f\n", real(i), imag(i))
+	//	}
+	//	os.Exit(1)
 
 	symbols := d.processSymbols(syncd, numSymbols)
 

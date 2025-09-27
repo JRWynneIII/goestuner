@@ -81,7 +81,7 @@ func StartUI(decoder *decode.Decoder, demodulator *demod.Demodulator, enableFFT 
 
 	decoderStats := tview.NewFlex().SetDirection(tview.FlexRow)
 	decoderStats.AddItem(tview.NewBox(), 0, 1, false)
-	decoderStats.AddItem(lockTable, 0, 1, false)
+	decoderStats.AddItem(lockTable, 0, 2, false)
 	decoderStats.AddItem(tview.NewBox(), 0, 1, false)
 	decoderStats.SetBorder(true)
 	decoderStats.SetTitle("Decoder Status")
@@ -92,12 +92,12 @@ func StartUI(decoder *decode.Decoder, demodulator *demod.Demodulator, enableFFT 
 	leftCol := tview.NewFlex().SetDirection(tview.FlexRow)
 	leftCol.AddItem(channelStats, 0, 6, false)
 	leftCol.AddItem(decoderStats, 0, 1, false)
+	if enableFFT {
+		leftCol.AddItem(signalPlot, 0, 2, false)
+	}
 
 	rightCol := tview.NewFlex().SetDirection(tview.FlexRow)
 	rightCol.AddItem(gaugeBox, 0, 4, false)
-	if enableFFT {
-		rightCol.AddItem(signalPlot, 0, 2, false)
-	}
 	if tuiConf.EnableLogOutput {
 		rightCol.AddItem(LogOut, 0, 2, false)
 	}
@@ -141,7 +141,6 @@ func StartUI(decoder *decode.Decoder, demodulator *demod.Demodulator, enableFFT 
 				for _, val := range demodulator.CurrentFFT {
 					bins = append(bins, val)
 				}
-				log.Infof("FFT Len:", len(bins))
 				signalPlot.SetData([][]float64{bins})
 			}
 
