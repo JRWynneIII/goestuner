@@ -1,7 +1,7 @@
 version: 1
 script:
 - mkdir -p AppDir/usr/share/icons
-- cp $(find /usr/share/icons -name utilities-terminal.png -type f 2> /dev/null | tail -n1) $GITHUB_WORKSPACE/AppDir/usr/share/icons
+- cp $(find /usr/share/icons -name utilities-terminal.png -type f 2> /dev/null | tail -n1) $GITHUB_WORKSPACE/AppDir/usr/share/icons/utilities-terminal.png
 AppDir:
   path: AppDir
   app_info:
