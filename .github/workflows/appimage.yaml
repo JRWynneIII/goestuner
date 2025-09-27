@@ -1,0 +1,33 @@
+name: GOESTuner AppImage
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build-appimage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y go libsoapysdr-dev soapysdr0.8-module-all git
+      - name: build dependencies
+        run: |
+          git clone https://github.com/opensatelliteproject/libsathelper.git
+          cd libsathelper
+          make libcorrect
+          sudo make libcorrect-install
+          make
+          sudo make install
+      - name: build
+        run: go build
+      - name: Build AppImage
+        uses: AppImageCrafters/build-appimage-action@master
+        with:
+          recipe: AppImageBuilder.yml
+      - uses: actions/upload-artifact@v2
+        with:
+          name: AppImage
+          path: './*.AppImage*'
