@@ -25,7 +25,7 @@ jobs:
       - name: build
         run: go build
       - name: Build AppImage
-        uses: AppImageCrafters/build-appimage-action@master
+        uses: AppImageCrafters/build-appimage-action@main
         with:
           recipe: AppImageBuilder.yml
       - uses: actions/upload-artifact@v4
