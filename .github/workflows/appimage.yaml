@@ -2,7 +2,7 @@ name: GOESTuner AppImage
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   build-appimage:
