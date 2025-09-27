@@ -1,7 +1,8 @@
 version: 1
 script:
 - mkdir -p AppDir/usr/share/icons
-- wget https://github.com/AppImageCrafters/appimage-builder/raw/refs/heads/main/resources/application-vnd.appimage.svg $GITHUB_WORKSPACE/AppDir/usr/share/icons/
+- wget https://github.com/AppImageCrafters/appimage-builder/raw/refs/heads/main/resources/application-vnd.appimage.svg
+- cp application-vnd.appimage.svg $GITHUB_WORKSPACE/AppDir/usr/share/icons/
 AppDir:
   path: AppDir
   app_info:
