@@ -5,7 +5,7 @@ AppDir:
     id: goestuner
     name: GOESTuner
     version: latest
-    exec: ./goestuner
+    exec: !ENV ${GITHUB_WORKSPACE}/goestuner
     exec_args: $@
   apt:
     arch: amd64
