@@ -25,9 +25,14 @@ jobs:
       - name: build
         run: go build
       - name: Build AppImage
-        uses: AppImageCrafters/build-appimage-action@main
-        with:
-          recipe: AppImageBuilder.yml
+        run: |
+          wget -O appimage-builder-x86_64.AppImage https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
+          chmod +x appimage-builder-x86_64.AppImage
+          sudo mv appimage-builder-x86_64.AppImage /usr/local/bin/appimage-builder
+          appimage-builder --recipe AppImageBuilder.yml --skip-test
+       # uses: AppImageCrafters/build-appimage-action@master
+       # with:
+       #   recipe: AppImageBuilder.yml
       - uses: actions/upload-artifact@v4
         with:
           name: AppImage
