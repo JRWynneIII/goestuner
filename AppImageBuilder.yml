@@ -17,7 +17,6 @@ AppDir:
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-security main restricted universe multiverse
     include:
     - libsoapysdr-dev 
-    - soapysdr0.8-module-all
   test:
     fedora:
       image: appimagecrafters/tests-env:fedora-30
