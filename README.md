@@ -111,6 +111,8 @@ A few tunables are exposed to allow cusomization of the TUI. These parameters ar
 * `vit_threshold_crit_pct = 15`: Defines the percentage value that the "Viterbi Error Rate" meter turns red
 * `enable_log_output = true`: Disables the log output in the bottom box, and makes the signal meters larger. Helpful if the meters are still too small to see on a laptop screen in the sunlight
 
+Additionally, if you would like to turn off the frequency plot (since this can be CPU intensive, since FFTs can be pretty beefy), set `xrit.do_fft = false`
+
 ### Acknowledgements:
 
 I'd like to thank the [Open Satellite Project](https://github.com/opensatelliteproject) for creating `libsathelper`, and `SatHelperApp`; these two projects were extremely helpful in the development of the demodulator and decoder, and served, not only as a good reference point for development of `goestuner`, but as a wonderful reference for learning various concepts about SDR and xRIT programming. 
