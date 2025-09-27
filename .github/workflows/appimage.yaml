@@ -12,7 +12,7 @@ jobs:
       - name: install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y go libsoapysdr-dev soapysdr0.8-module-all git
+          sudo apt-get install -y golang libsoapysdr-dev soapysdr0.8-module-all git
       - name: build dependencies
         run: |
           git clone https://github.com/opensatelliteproject/libsathelper.git
