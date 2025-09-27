@@ -27,7 +27,7 @@ AppDir:
     - soapysdr-module-all
   runtime:
     path_mappings:
-    - /usr/lib/x86_64-linux-gnu/SoapySDR/:$APPDIR/usr/lib/x86_64-linux-gnu/SoapySDR/
+    - /usr/lib:$APPDIR/usr/lib/
 AppImage:
   arch: x86_64
   sign-key: None
