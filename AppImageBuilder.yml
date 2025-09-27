@@ -24,6 +24,7 @@ AppDir:
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-security main restricted universe multiverse
     include:
     - libsoapysdr-dev 
+    - soapysdr-module-all
 AppImage:
   arch: x86_64
   sign-key: None
