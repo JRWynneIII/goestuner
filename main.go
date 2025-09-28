@@ -26,8 +26,7 @@ var cli struct {
 	Probe   struct {
 	} `cmd:"" help:"List the available radios and SoapySDR configuration"`
 	Tune struct {
-		File string `help:"Pass a file of complex values instead of a radio"`
-	} `cmd:"" help:"Starts the frontend webserver"`
+	} `cmd:"" help:"Starts the TUI and connects to the SDR"`
 }
 
 var configFile = koanf.New(".")
@@ -97,33 +96,31 @@ func main() {
 		log.Debug("Starting init of SDR")
 		switch rdef.SampleType {
 		case "complex64":
-			if len(cli.Tune.File) == 0 {
-				r := radio.New[complex64](rdef, rname, radio.CF32, xritChunkSize)
-				r.Connect()
-				defer r.Destroy()
-				decoder := datalink.New(xritChunkSize, configFile)
-				demodulator := demod.New(radio.CF32, float32(rdef.SampleRate), xritChunkSize, configFile, &decoder.SymbolsInput)
-				go demodulator.Start()
-				go decoder.Start()
-				defer demodulator.Close()
-				defer decoder.Close()
-				//Thread to get samples from the radio, and pass it to the demodulator
-				go func() {
-					var buf []complex64
-					for {
-						samples := r.Read(xritChunkSize)
-						buf = append(buf, samples.([]complex64)...)
+			r := radio.New[complex64](rdef, rname, radio.CF32, xritChunkSize)
+			r.Connect()
+			defer r.Destroy()
+			decoder := datalink.New(xritChunkSize, configFile)
+			demodulator := demod.New(radio.CF32, float32(rdef.SampleRate), xritChunkSize, configFile, &decoder.SymbolsInput)
+			go demodulator.Start()
+			go decoder.Start()
+			defer demodulator.Close()
+			defer decoder.Close()
+			//Thread to get samples from the radio, and pass it to the demodulator
+			go func() {
+				var buf []complex64
+				for {
+					samples := r.Read(xritChunkSize)
+					buf = append(buf, samples.([]complex64)...)
 
-						if len(buf) >= int(xritChunkSize) {
-							demodulator.SampleInput <- buf
-							buf = []complex64{}
-						}
-						time.Sleep(5 * time.Millisecond)
+					if len(buf) >= int(xritChunkSize) {
+						demodulator.SampleInput <- buf
+						buf = []complex64{}
 					}
-				}()
-				tui.StartUI(decoder, demodulator, xritDoFFT, tuiDef)
-				log.SetOutput(tui.LogOut)
-			}
+					time.Sleep(5 * time.Millisecond)
+				}
+			}()
+			tui.StartUI(decoder, demodulator, xritDoFFT, tuiDef)
+			log.SetOutput(tui.LogOut)
 		default:
 			log.Fatalf("Unsupported sample_type defined for radio %s\n Supported sample types are: [CF32]", rname)
 		}
