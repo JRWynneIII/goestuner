@@ -26,8 +26,8 @@ AppDir:
     - libsoapysdr-dev 
     - soapysdr-module-all
   runtime:
-    path_mappings:
-    - $APPDIR/usr/lib/:/usr/lib
+    env:
+      APPDIR_LIBRARY_PATH: $APPDIR/lib/x86_64-linux-gnu:$APPDIR/usr/lib/x86_64-linux-gnu
 AppImage:
   arch: x86_64
   sign-key: None
