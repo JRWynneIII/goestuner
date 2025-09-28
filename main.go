@@ -10,7 +10,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/charmbracelet/log"
 	"github.com/jrwynneiii/goestuner/config"
-	"github.com/jrwynneiii/goestuner/decode"
+	"github.com/jrwynneiii/goestuner/datalink"
 	"github.com/jrwynneiii/goestuner/demod"
 	"github.com/jrwynneiii/goestuner/radio"
 	"github.com/jrwynneiii/goestuner/tui"
@@ -20,6 +20,15 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 )
+
+var cli struct {
+	Verbose bool `help:"Prints debug output by default"`
+	Probe   struct {
+	} `cmd:"" help:"List the available radios and SoapySDR configuration"`
+	Tune struct {
+		File string `help:"Pass a file of complex values instead of a radio"`
+	} `cmd:"" help:"Starts the frontend webserver"`
+}
 
 var configFile = koanf.New(".")
 
@@ -92,7 +101,7 @@ func main() {
 				r := radio.New[complex64](rdef, rname, radio.CF32, xritChunkSize)
 				r.Connect()
 				defer r.Destroy()
-				decoder := decode.New(xritChunkSize, configFile)
+				decoder := datalink.New(xritChunkSize, configFile)
 				demodulator := demod.New(radio.CF32, float32(rdef.SampleRate), xritChunkSize, configFile, &decoder.SymbolsInput)
 				go demodulator.Start()
 				go decoder.Start()

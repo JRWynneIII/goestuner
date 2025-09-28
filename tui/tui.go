@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/gdamore/tcell/v2"
 	"github.com/jrwynneiii/goestuner/config"
-	"github.com/jrwynneiii/goestuner/decode"
+	"github.com/jrwynneiii/goestuner/datalink"
 	"github.com/jrwynneiii/goestuner/demod"
 	"github.com/navidys/tvxwidgets"
 	"github.com/rivo/tview"
@@ -15,7 +15,7 @@ import (
 // Making this global so that all modules can set the log output to this io.Writer
 var LogOut *tview.TextView
 
-func StartUI(decoder *decode.Decoder, demodulator *demod.Demodulator, enableFFT bool, tuiConf config.TuiConf) {
+func StartUI(decoder *datalink.Decoder, demodulator *demod.Demodulator, enableFFT bool, tuiConf config.TuiConf) {
 	app := tview.NewApplication()
 
 	LogOut = tview.NewTextView().

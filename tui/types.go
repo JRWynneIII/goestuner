@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/jrwynneiii/goestuner/decode"
+	"github.com/jrwynneiii/goestuner/datalink"
 	"github.com/rivo/tview"
 )
 
@@ -34,29 +34,29 @@ var overallDecoderStats = DecoderStats{
 }
 
 var channels = []Channel{
-	{0, decode.VCIDs[0], 0, 0},
-	{1, decode.VCIDs[1], 0, 0},
-	{2, decode.VCIDs[2], 0, 0},
-	{6, decode.VCIDs[6], 0, 0},
-	{7, decode.VCIDs[7], 0, 0},
-	{8, decode.VCIDs[8], 0, 0},
-	{9, decode.VCIDs[9], 0, 0},
-	{13, decode.VCIDs[13], 0, 0},
-	{14, decode.VCIDs[14], 0, 0},
-	{15, decode.VCIDs[15], 0, 0},
-	{17, decode.VCIDs[17], 0, 0},
-	{20, decode.VCIDs[20], 0, 0},
-	{21, decode.VCIDs[21], 0, 0},
-	{22, decode.VCIDs[22], 0, 0},
-	{23, decode.VCIDs[23], 0, 0},
-	{24, decode.VCIDs[24], 0, 0},
-	{25, decode.VCIDs[25], 0, 0},
-	{26, decode.VCIDs[26], 0, 0},
-	{30, decode.VCIDs[30], 0, 0},
-	{31, decode.VCIDs[31], 0, 0},
-	{32, decode.VCIDs[32], 0, 0},
-	{60, decode.VCIDs[60], 0, 0},
-	{63, decode.VCIDs[63], 0, 0},
+	{0, datalink.VCIDs[0], 0, 0},
+	{1, datalink.VCIDs[1], 0, 0},
+	{2, datalink.VCIDs[2], 0, 0},
+	{6, datalink.VCIDs[6], 0, 0},
+	{7, datalink.VCIDs[7], 0, 0},
+	{8, datalink.VCIDs[8], 0, 0},
+	{9, datalink.VCIDs[9], 0, 0},
+	{13, datalink.VCIDs[13], 0, 0},
+	{14, datalink.VCIDs[14], 0, 0},
+	{15, datalink.VCIDs[15], 0, 0},
+	{17, datalink.VCIDs[17], 0, 0},
+	{20, datalink.VCIDs[20], 0, 0},
+	{21, datalink.VCIDs[21], 0, 0},
+	{22, datalink.VCIDs[22], 0, 0},
+	{23, datalink.VCIDs[23], 0, 0},
+	{24, datalink.VCIDs[24], 0, 0},
+	{25, datalink.VCIDs[25], 0, 0},
+	{26, datalink.VCIDs[26], 0, 0},
+	{30, datalink.VCIDs[30], 0, 0},
+	{31, datalink.VCIDs[31], 0, 0},
+	{32, datalink.VCIDs[32], 0, 0},
+	{60, datalink.VCIDs[60], 0, 0},
+	{63, datalink.VCIDs[63], 0, 0},
 }
 
 func (l *LockTableData) GetRowCount() int {
