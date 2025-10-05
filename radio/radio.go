@@ -3,6 +3,8 @@ package radio
 // #cgo CFLAGS: -g -Wall
 // #cgo LDFLAGS: -lSoapySDR
 import (
+	"time"
+
 	"github.com/charmbracelet/log"
 	"github.com/jrwynneiii/goestuner/config"
 
@@ -28,21 +30,24 @@ const (
 )
 
 type Radio[T StreamConstraint] struct {
-	Driver     string
-	Address    string
-	SampleRate float64
-	SampleType StreamType
-	BufferCU8  [][]uint8
-	BufferCS8  [][]int8
-	BufferCU16 [][]uint16
-	BufferCS16 [][]int16
-	BufferCF32 [][]complex64
-	BufferCF64 [][]complex128
-	Frequency  float64
+	SamplesOutput *chan []complex64
+	Driver        string
+	Address       string
+	SampleRate    float64
+	SampleType    StreamType
+	BufferCU8     [][]uint8
+	BufferCS8     [][]int8
+	BufferCU16    [][]uint16
+	BufferCS16    [][]int16
+	BufferCF32    [][]complex64
+	BufferCF64    [][]complex128
+	Frequency     float64
 	//Private:
-	args   map[string]string
-	device *device.SDRDevice
-	stream any
+	chunksize uint
+	args      map[string]string
+	device    *device.SDRDevice
+	stream    any
+	Stopping  bool
 }
 
 func InitSoapySDR() {
@@ -117,16 +122,35 @@ func LogAllSoapySDRDevices() {
 
 }
 
-func New[T StreamConstraint](conf config.RadioConf, driver string, stype StreamType, bufSize uint) *Radio[T] {
+func (r *Radio[T]) Start() {
+	var buf []complex64
+	for {
+		if !r.Stopping {
+			samples := r.Read(r.chunksize)
+			buf = append(buf, samples.([]complex64)...)
+
+			if len(buf) >= int(r.chunksize) {
+				*r.SamplesOutput <- buf
+				buf = []complex64{}
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+}
+
+func New[T StreamConstraint](conf config.RadioConf, driver string, stype StreamType, bufSize uint, output *chan []complex64) *Radio[T] {
 	log.Debug("Initing SoapySDR")
 	InitSoapySDR()
 
 	r := Radio[T]{
-		Driver:     driver,
-		SampleRate: conf.SampleRate,
-		SampleType: stype,
-		Frequency:  conf.Frequency,
-		Address:    conf.Address,
+		Driver:        driver,
+		SampleRate:    conf.SampleRate,
+		SampleType:    stype,
+		Frequency:     conf.Frequency,
+		Address:       conf.Address,
+		SamplesOutput: output,
+		chunksize:     bufSize,
 	}
 
 	switch stype {
@@ -137,15 +161,25 @@ func New[T StreamConstraint](conf config.RadioConf, driver string, stype StreamT
 	return &r
 }
 
+func (r *Radio[T]) Pause() {
+	r.Stopping = true
+	r.StreamDeactivate()
+	r.StreamClose()
+	r.BufferCF32 = make([][]complex64, 1)
+	r.BufferCF32[0] = make([]complex64, r.chunksize)
+}
+
 func (r *Radio[T]) Read(num uint) any {
 	flags := make([]int, 1)
 	timeout := uint(100000) //nanosec
 
 	switch r.SampleType {
 	case CF32:
-		timeNs, numSamples, err := r.stream.(*device.SDRStreamCF32).Read(r.BufferCF32, num, flags, timeout)
-		log.Debugf("timeNs: %v, numSamples: %v, err: %v", timeNs, numSamples, err)
-		return r.BufferCF32[0][:numSamples]
+		if !r.Stopping {
+			timeNs, numSamples, err := r.stream.(*device.SDRStreamCF32).Read(r.BufferCF32, num, flags, timeout)
+			log.Debugf("timeNs: %v, numSamples: %v, err: %v", timeNs, numSamples, err)
+			return r.BufferCF32[0][:numSamples]
+		}
 	}
 	return []T{}
 }
@@ -182,8 +216,10 @@ func (r *Radio[T]) Connect() {
 	}
 	// Create the soapysdr device object
 	var err error
-	if r.device, err = device.Make(r.args); err != nil {
-		log.Fatalf("Could not create SoapySDR device! %s", err.Error())
+	if r.device == nil {
+		if r.device, err = device.Make(r.args); err != nil {
+			log.Fatalf("Could not create SoapySDR device! %s", err.Error())
+		}
 	}
 
 	//Set the sample rate
@@ -227,6 +263,7 @@ func (r *Radio[T]) StreamActivate() {
 		}
 	}
 	//Read the first few samples and discard to make sure we have clean data
+	r.Stopping = false
 	r.Read(1024)
 	if len(r.BufferCU8) > 0 {
 		clear(r.BufferCU8[0])
@@ -273,6 +310,8 @@ func (r *Radio[T]) StreamClose() {
 }
 
 func (r *Radio[T]) Destroy() {
+	r.Stopping = true
 	r.StreamDeactivate()
 	r.StreamClose()
+	close(*r.SamplesOutput)
 }

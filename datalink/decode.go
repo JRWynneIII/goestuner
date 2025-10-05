@@ -2,6 +2,7 @@ package datalink
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -37,38 +38,39 @@ var VCIDs = map[int]string{
 }
 
 type Decoder struct {
-	TotalFramesProcessed      int
-	RxPacketsPerChannel       map[int]int
-	DroppedPacketsPerChannel  map[int]int
-	FrameLock                 bool
-	SymbolsInput              chan byte
-	MaxVitErrors              int
-	ViterbiBytes              []byte
-	DecodedBytes              []byte
-	LastFrameSizeBits         int
-	LastFrameSizeBytes        int
-	LastFrameEnd              []byte
-	Viterbi                   SatHelper.Viterbi27
-	EncodedBytes              []byte
-	ReedSolomonCorrectedBytes []byte
-	ReedSolomanWorkBuffer     []byte
-	ReedSolomon               SatHelper.ReedSolomon
-	Correlator                SatHelper.Correlator
-	PacketFixer               SatHelper.PacketFixer
-	SyncWord                  []byte
-	EncodedFrameSize          int
-	MaxRecheckThreshold       int
-	MinCorrelationBits        uint
-	FrameSize                 int
-	SyncWordSize              int
-	RsBlocks                  byte
-	RSWorkBuffer              []byte
-	RSCorrectedData           []byte
-	RSParityBlockSize         int
-	RSParitySize              int
-	AverageRsCorrections      float32
-	AvgVitCorrections         float32
-	SigQuality                float32
+	TotalFramesProcessed     int
+	RxPacketsPerChannel      map[int]int
+	DroppedPacketsPerChannel map[int]int
+	StatsMutex               sync.RWMutex
+	FrameLock                bool
+	SymbolsInput             chan byte
+	MaxVitErrors             int
+	ViterbiBytes             []byte
+	DecodedBytes             []byte
+	LastFrameSizeBits        int
+	LastFrameSizeBytes       int
+	LastFrameEnd             []byte
+	Viterbi                  SatHelper.Viterbi27
+	EncodedBytes             []byte
+	RSCorrectedBytes         int64
+	ReedSolomon              SatHelper.ReedSolomon
+	Correlator               SatHelper.Correlator
+	PacketFixer              SatHelper.PacketFixer
+	SyncWord                 []byte
+	EncodedFrameSize         int
+	MaxRecheckThreshold      int
+	MinCorrelationBits       uint
+	FrameSize                int
+	SyncWordSize             int
+	RsBlocks                 byte
+	RSWorkBuffer             []byte
+	RSCorrectedData          []byte
+	RSParityBlockSize        int
+	RSParitySize             int
+	RSTotalProcessedBytes    int64
+	AverageRsCorrections     float64
+	AvgVitCorrections        float32
+	SigQuality               float32
 
 	lastFrameOk         bool
 	recheckCounter      int
@@ -76,7 +78,6 @@ type Decoder struct {
 }
 
 func (d *Decoder) Close() {
-	close(d.SymbolsInput)
 }
 
 func New(bufsize uint, configFile *koanf.Koanf) *Decoder {
@@ -221,7 +222,7 @@ func (d *Decoder) cleanFrame() {
 	copy(d.DecodedBytes[:(d.FrameSize-d.SyncWordSize)-d.SyncWordSize], d.DecodedBytes[d.SyncWordSize:(d.FrameSize-d.SyncWordSize)])
 }
 
-func (d *Decoder) errorCorrectPacket() int32 {
+func (d *Decoder) errorCorrectPacket() {
 	//Reed Solomon Time
 	derrors := make([]int32, d.RsBlocks)
 	totalBytesFixed := int32(0)
@@ -232,9 +233,6 @@ func (d *Decoder) errorCorrectPacket() int32 {
 
 		d.ReedSolomon.Interleave(&d.RSWorkBuffer[0], &d.RSCorrectedData[0], byte(i), d.RsBlocks)
 
-		if derrors[i] != -1 {
-			d.AverageRsCorrections += float32(derrors[i])
-		}
 		if derrors[i] > -1 {
 			totalBytesFixed += derrors[i]
 		}
@@ -248,9 +246,9 @@ func (d *Decoder) errorCorrectPacket() int32 {
 		// Got a good packet! lets go!
 		d.currentFrameCorrupt = false
 		d.lastFrameOk = true
+		d.AverageRsCorrections = (float64(totalBytesFixed) / float64(len(d.DecodedBytes))) * 100.0
+		log.Infof("[Reed-Soloman] Last packet: Fixed %d of %d bytes", totalBytesFixed, len(d.DecodedBytes))
 	}
-
-	return totalBytesFixed
 
 }
 
@@ -281,21 +279,25 @@ func (d *Decoder) Start() {
 			BER := d.calculateBitErrorRate()
 
 			// Calculate our 'signal quality' percentage based upon the bit error rate
+			d.StatsMutex.Lock()
 			d.SigQuality = 100 * ((float32(d.MaxVitErrors) - float32(BER)) / float32(d.MaxVitErrors))
 			if d.SigQuality > 100 {
 				d.SigQuality = 100
 			} else if d.SigQuality < 0 {
 				d.SigQuality = 0
 			}
+			d.StatsMutex.Unlock()
 
 			d.cleanFrame()
 
 			// Derandomize packet: Unsure what exactly this does tbh
 			SatHelper.DeRandomizerDeRandomize(&d.DecodedBytes[0], d.FrameSize-d.SyncWordSize)
 
-			totalBytesFixed := d.errorCorrectPacket()
+			d.errorCorrectPacket()
 
+			d.StatsMutex.Lock()
 			d.TotalFramesProcessed++
+			d.StatsMutex.Unlock()
 
 			// Spacecraft ID (TODO: This seems to always be 0 for some reason?)
 			scid := ((d.RSCorrectedData[0] & 0x3F) << 2) | (d.RSCorrectedData[1]&0xC0)>>6
@@ -309,15 +311,19 @@ func (d *Decoder) Start() {
 			counter >>= 8
 
 			if !d.currentFrameCorrupt {
+				d.StatsMutex.Lock()
 				d.FrameLock = true
+				d.StatsMutex.Unlock()
+
 				log.Infof("Got frame: vcid: %d (%s) scid: %d object number: %d", int(vcid), VCIDs[int(vcid)], scid, counter)
-				if totalBytesFixed > 0 {
-					log.Infof("Parity corrected %d bytes from last packet", totalBytesFixed)
-				}
+				d.StatsMutex.Lock()
 				d.RxPacketsPerChannel[int(vcid)]++
+				d.StatsMutex.Unlock()
 			} else {
+				d.StatsMutex.Lock()
 				d.DroppedPacketsPerChannel[int(vcid)]++
 				d.FrameLock = false
+				d.StatsMutex.Unlock()
 			}
 
 		} else {

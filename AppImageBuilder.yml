@@ -1,11 +1,11 @@
 version: 1
-script:
-- mkdir -p AppDir/usr/share/icons
-- mkdir -p AppDir/usr/bin
-- wget https://github.com/AppImageCrafters/appimage-builder/raw/refs/heads/main/resources/application-vnd.appimage.svg
-- cp application-vnd.appimage.svg $GITHUB_WORKSPACE/AppDir/usr/share/icons/
-- which mksquashfs || apt install squashfs-tools
-- cp $GITHUB_WORKSPACE/goestuner AppDir/usr/bin
+#script:
+#- mkdir -p AppDir/usr/share/icons
+#- mkdir -p AppDir/usr/bin
+#- wget https://github.com/AppImageCrafters/appimage-builder/raw/refs/heads/main/resources/application-vnd.appimage.svg
+#- cp application-vnd.appimage.svg $GITHUB_WORKSPACE/AppDir/usr/share/icons/
+#- which mksquashfs || apt install squashfs-tools
+#- cp $GITHUB_WORKSPACE/goestuner AppDir/usr/bin
 AppDir:
   path: AppDir
   app_info:

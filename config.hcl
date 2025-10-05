@@ -11,10 +11,10 @@ radio  {
 
 tui {
   refresh_ms = 500
-  rs_threshold_warn_pct = 20
-  rs_threshold_crit_pct = 25
-  vit_threshold_warn_pct = 10
-  vit_threshold_crit_pct = 15
+  rs_threshold_warn_pct = 2
+  rs_threshold_crit_pct = 5
+  vit_threshold_warn_pct = 3
+  vit_threshold_crit_pct = 5
   enable_log_output = true
 }
 

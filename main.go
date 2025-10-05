@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime/pprof"
 	"strings"
-	"time"
 
 	"github.com/alecthomas/kong"
 	"github.com/charmbracelet/log"
@@ -23,6 +23,7 @@ import (
 
 var cli struct {
 	Verbose bool `help:"Prints debug output by default"`
+	Profile bool `help:"Output a pprof profile"`
 	Probe   struct {
 	} `cmd:"" help:"List the available radios and SoapySDR configuration"`
 	Tune struct {
@@ -48,6 +49,15 @@ func main() {
 	flags := kong.Parse(&cli)
 	if cli.Verbose {
 		log.SetLevel(log.DebugLevel)
+	}
+
+	if cli.Profile {
+		prof, err := os.Create("./cpu.pprof")
+		if err != nil {
+			panic(err)
+		}
+		pprof.StartCPUProfile(prof)
+		defer pprof.StopCPUProfile()
 	}
 
 	if err := configFile.Load(file.Provider(getConfigPath()), hcl.Parser(true)); err != nil {
@@ -96,31 +106,19 @@ func main() {
 		log.Debug("Starting init of SDR")
 		switch rdef.SampleType {
 		case "complex64":
-			r := radio.New[complex64](rdef, rname, radio.CF32, xritChunkSize)
-			r.Connect()
-			defer r.Destroy()
 			decoder := datalink.New(xritChunkSize, configFile)
 			demodulator := demod.New(radio.CF32, float32(rdef.SampleRate), xritChunkSize, configFile, &decoder.SymbolsInput)
+			r := radio.New[complex64](rdef, rname, radio.CF32, xritChunkSize, &demodulator.SampleInput)
+			r.Connect()
+
+			go r.Start()
 			go demodulator.Start()
 			go decoder.Start()
 			defer demodulator.Close()
 			defer decoder.Close()
-			//Thread to get samples from the radio, and pass it to the demodulator
-			go func() {
-				var buf []complex64
-				for {
-					samples := r.Read(xritChunkSize)
-					buf = append(buf, samples.([]complex64)...)
+			defer r.Destroy()
 
-					if len(buf) >= int(xritChunkSize) {
-						demodulator.SampleInput <- buf
-						buf = []complex64{}
-					}
-					time.Sleep(5 * time.Millisecond)
-				}
-			}()
-			tui.StartUI(decoder, demodulator, xritDoFFT, tuiDef)
-			log.SetOutput(tui.LogOut)
+			tui.StartUI(decoder, demodulator, r, xritDoFFT, tuiDef)
 		default:
 			log.Fatalf("Unsupported sample_type defined for radio %s\n Supported sample types are: [CF32]", rname)
 		}

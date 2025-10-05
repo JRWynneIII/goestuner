@@ -2,6 +2,7 @@ package demod
 
 import (
 	"math"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -33,6 +34,8 @@ type Demodulator struct {
 	CurrentFFT        []float64
 	DoFFT             bool
 	FFTWorking        bool
+	Stopping          bool
+	FFTMutex          sync.RWMutex
 }
 
 func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.Koanf, decoderInput *chan byte) *Demodulator {
@@ -111,9 +114,14 @@ func (d *Demodulator) doFFT(samples []complex64) {
 		}
 	}
 
+	d.FFTMutex.Lock()
 	d.CurrentFFT = output
+	d.FFTMutex.Unlock()
+
 	time.Sleep(500 * time.Millisecond)
+	d.FFTMutex.Lock()
 	d.FFTWorking = false
+	d.FFTMutex.Unlock()
 }
 
 func (d *Demodulator) Start() {
@@ -163,8 +171,12 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 	syncd := make([]complex64, len(out))
 	numSymbols := d.ClockRecovery.Work(&out[0], &syncd[0], len(out))
 
+	d.FFTMutex.RLock()
 	if d.DoFFT && !d.FFTWorking {
+		d.FFTMutex.RUnlock()
 		go d.doFFT(out)
+	} else {
+		d.FFTMutex.RUnlock()
 	}
 
 	//	for _, i := range out {
@@ -175,7 +187,9 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 	symbols := d.processSymbols(syncd, numSymbols)
 
 	for _, symbol := range symbols {
-		*d.SymbolsOutput <- symbol
+		if !d.Stopping {
+			*d.SymbolsOutput <- symbol
+		}
 	}
 }
 
@@ -197,5 +211,6 @@ func (d *Demodulator) processSymbols(ob []complex64, numSymbols int) []byte {
 }
 
 func (d *Demodulator) Close() {
-	close(d.SampleInput)
+	d.Stopping = true
+	close(*d.SymbolsOutput)
 }

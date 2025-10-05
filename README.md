@@ -78,6 +78,12 @@ Run "goestuner <command> --help" for more information on a command.
 * `probe`: Queries SoapySDR to list the available SDRs and their respctive settings (NOTE: Does not show anything for `rtl_tcp` devices)
 * `tune`: Starts the HRIT demodulator/decoder and TUI. Please note, that while the demodulator/HRIT decoder isn't perfect, it may take up to 30 seconds for `goestuner` to get a lock on the signal, and start decoding packets. This is normal.
 
+### Keyboard Shortcuts
+
+* `p`: Pauses the TUI; processing is still ongoing in the background. This can be useful for reading the log output, if it becomes too verbose or too fast.
+* `q`: Stops the application gracefully and exits
+* `f`: Flushes the processing stack and resets everything to default values. This is useful if using `rtl_tcp`, since it can introduce a delay between when the antenna is moved, and that is reflected in the sampling (This delay can be caused by any number of reasons, including poor network connection between the `rtl_tcp` server and the SoapySDR client)
+
 ### Configuration
 
 The `goestuner` config file uses the [HashiCorp Configuration Language](https://hcl.readthedocs.io/en/latest/language_design.html) DSL. Included as `config.hcl`, the example configuration file should be enough to get you started. Most values will never need to be changed, except for the `radio {}` block. This contains the configuration that is used to tell SoapySDR which radio to use. Included in the config file is an example for an RTL-SDR dongle, and one for accessing an SDR over `rtl_tcp`.

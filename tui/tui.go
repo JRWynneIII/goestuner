@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -8,14 +10,19 @@ import (
 	"github.com/jrwynneiii/goestuner/config"
 	"github.com/jrwynneiii/goestuner/datalink"
 	"github.com/jrwynneiii/goestuner/demod"
+	"github.com/jrwynneiii/goestuner/radio"
 	"github.com/navidys/tvxwidgets"
 	"github.com/rivo/tview"
 )
 
 // Making this global so that all modules can set the log output to this io.Writer
 var LogOut *tview.TextView
+var DebugOut *tview.TextView
 
-func StartUI(decoder *datalink.Decoder, demodulator *demod.Demodulator, enableFFT bool, tuiConf config.TuiConf) {
+func StartUI(decoder *datalink.Decoder, demodulator *demod.Demodulator, r *radio.Radio[complex64], enableFFT bool, tuiConf config.TuiConf) {
+	enableDebugOutput := false
+	debugVisible := false
+	pause := false
 	app := tview.NewApplication()
 
 	LogOut = tview.NewTextView().
@@ -23,12 +30,34 @@ func StartUI(decoder *datalink.Decoder, demodulator *demod.Demodulator, enableFF
 		SetRegions(true).
 		SetWordWrap(true)
 
+	var logMutex sync.Mutex
+	var debugMutex sync.Mutex
 	LogOut.SetChangedFunc(func() {
-		LogOut.ScrollToEnd()
-		app.Draw()
+		if !pause {
+			logMutex.Lock()
+			LogOut.ScrollToEnd()
+			app.Draw()
+			logMutex.Unlock()
+		}
 	})
+
 	LogOut.SetBorder(true).SetTitle("Log Output")
 	log.SetOutput(LogOut)
+
+	DebugOut = tview.NewTextView().
+		SetDynamicColors(true).
+		SetRegions(true).
+		SetWordWrap(true)
+
+	DebugOut.SetChangedFunc(func() {
+		if !pause {
+			debugMutex.Lock()
+			DebugOut.ScrollToEnd()
+			app.Draw()
+			debugMutex.Unlock()
+		}
+	})
+	DebugOut.SetBorder(true).SetTitle("Debug")
 
 	// Init our tables
 	channelData := &ChannelTableData{}
@@ -101,52 +130,133 @@ func StartUI(decoder *datalink.Decoder, demodulator *demod.Demodulator, enableFF
 	if tuiConf.EnableLogOutput {
 		rightCol.AddItem(LogOut, 0, 2, false)
 	}
+	if enableDebugOutput {
+		rightCol.AddItem(DebugOut, 0, 2, false)
+	}
 	page.AddItem(leftCol, 0, 2, false)
 	page.AddItem(rightCol, 0, 5, false)
 
+	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'q':
+			app.Stop()
+		case 'f':
+			//Pause radio
+			app.Suspend(func() {
+				// Reset to stdout log output and Pause the radio
+				log.SetOutput(os.Stdout)
+				log.Debugf("Pausing SDR")
+				r.Pause()
+				//Wait for physical layer to drain
+				log.Debug("Waiting for phyiscal layer to drain")
+				for len(demodulator.SampleInput) > 0 {
+					time.Sleep(50 * time.Millisecond)
+				}
+				//Forcibly flush the datalink layer. This sucks but it is what it is
+				log.Debug("Flushing datalink layer")
+				for len(*demodulator.SymbolsOutput) > 0 {
+					select {
+					case c := <-*demodulator.SymbolsOutput:
+						func(a any) {}(c)
+					}
+				}
+				//Reset stats
+				log.Debug("Resetting channel and decoder stats")
+				ResetChannelAndDecoderStats()
+
+				//Reset datalink layer
+				log.Debug("Resetting Lock and guage stats")
+				decoder.FrameLock = false
+				decoder.SigQuality = 0.0
+				decoder.AverageRsCorrections = 0
+				decoder.RxPacketsPerChannel = make(map[int]int)
+				decoder.DroppedPacketsPerChannel = make(map[int]int)
+				decoder.TotalFramesProcessed = 0
+				signalGauge.SetValue(float64(decoder.SigQuality))
+				berGauge.SetValue(0.0)
+				rsCorrectionsGauge.SetValue(float64(decoder.AverageRsCorrections))
+
+				//Restart radio
+				log.Debug("Reconnecting to SDR...")
+				r.Connect()
+				log.Debug("Flushed!")
+				log.SetOutput(LogOut)
+			})
+		case 'd':
+			if !enableDebugOutput {
+				enableDebugOutput = true
+			} else {
+				enableDebugOutput = false
+			}
+		case 'p':
+			if pause {
+				pause = false
+			} else {
+				pause = true
+			}
+		}
+		return event
+	})
 	//Update all data in our UI.
 	go func() {
 		for {
-			// Gather stats from decoder
-			frameLock := decoder.FrameLock
-			ber := decoder.Viterbi.GetPercentBER()
-			sigquality := decoder.SigQuality
-			averageRsCorrections := decoder.AverageRsCorrections
-			packetsPerChannel := decoder.RxPacketsPerChannel
-			droppedPacketsPerChannel := decoder.DroppedPacketsPerChannel
-			totalFrames := decoder.TotalFramesProcessed
-			RSCorrectionPercent := (averageRsCorrections / float32(totalFrames)) * 100
+			if !pause {
+				// Gather stats from decoder
+				decoder.StatsMutex.RLock()
+				frameLock := decoder.FrameLock
+				ber := decoder.Viterbi.GetPercentBER()
+				sigquality := decoder.SigQuality
+				RSCorrectionPercent := decoder.AverageRsCorrections
+				packetsPerChannel := decoder.RxPacketsPerChannel
+				droppedPacketsPerChannel := decoder.DroppedPacketsPerChannel
+				totalFrames := decoder.TotalFramesProcessed
 
-			// Update channel stats
-			var totalPacketsDropped int
-			for idx, channel := range channels {
-				channel.NumPackets = packetsPerChannel[channel.ID]
-				channel.NumPacketsDropped = droppedPacketsPerChannel[channel.ID]
-				channels[idx] = channel
-				totalPacketsDropped += channel.NumPacketsDropped
-			}
-			//Update gauges
-			signalGauge.SetValue(float64(sigquality))
-			berGauge.SetValue(float64(ber))
-			rsCorrectionsGauge.SetValue(float64(RSCorrectionPercent))
-
-			//Update decoder stats
-			overallDecoderStats.FrameLock = frameLock
-			overallDecoderStats.TotalPackets = totalFrames
-			overallDecoderStats.TotalDroppedPackets = totalPacketsDropped
-
-			//Update signal plot
-			if len(demodulator.CurrentFFT) > 0 {
-				var bins []float64
-				for _, val := range demodulator.CurrentFFT {
-					bins = append(bins, val)
+				// Update channel stats
+				var totalPacketsDropped int
+				for idx := 0; idx < len(channels); idx++ {
+					channel := ReadChannelData(idx)
+					channel.NumPackets = packetsPerChannel[channel.ID]
+					channel.NumPacketsDropped = droppedPacketsPerChannel[channel.ID]
+					WriteChannelData(idx, channel)
+					totalPacketsDropped += channel.NumPacketsDropped
 				}
-				signalPlot.SetData([][]float64{bins})
-			}
+				decoder.StatsMutex.RUnlock()
+				//Update gauges
+				signalGauge.SetValue(float64(sigquality))
+				berGauge.SetValue(float64(ber))
+				rsCorrectionsGauge.SetValue(float64(RSCorrectionPercent))
 
-			app.Draw()
+				//Update decoder stats
+				WriteOverallDecoderStats(DecoderStats{
+					FrameLock:           frameLock,
+					TotalPackets:        totalFrames,
+					TotalDroppedPackets: totalPacketsDropped,
+				})
+
+				//Update signal plot
+				demodulator.FFTMutex.RLock()
+				fft := demodulator.CurrentFFT
+				demodulator.FFTMutex.RUnlock()
+
+				if len(fft) > 0 {
+					var bins []float64
+					for _, val := range fft {
+						bins = append(bins, val)
+					}
+					signalPlot.SetData([][]float64{bins})
+				}
+
+				if enableDebugOutput && !debugVisible {
+					rightCol.AddItem(DebugOut, 0, 2, false)
+					debugVisible = true
+				} else if !enableDebugOutput && debugVisible {
+					rightCol.RemoveItem(DebugOut)
+					debugVisible = false
+				}
+
+				app.Draw()
+			}
 			//Sleep half a second
-			//TODO: maybe make this a config value, or ability to set on the fly?
 			time.Sleep(time.Duration(tuiConf.RefreshMs) * time.Millisecond)
 
 		}
