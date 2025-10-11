@@ -118,24 +118,6 @@ func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.
 	return &d
 }
 
-func (d *Demodulator) updateSNR(s *[]complex64) {
-	for _, samp := range *s {
-		tmp_y1 := math.Pow(cmplx.Abs(complex128(samp)), 2)
-		d.SNR.Y1 = d.SNR.Alpha*tmp_y1 + d.SNR.Beta*d.SNR.Y1
-
-		tmp_y2 := math.Pow(cmplx.Abs(complex128(samp)), 4)
-		d.SNR.Y2 = d.SNR.Alpha*tmp_y2 + d.SNR.Beta*d.SNR.Y2
-	}
-
-	if math.IsNaN(d.SNR.Y1) {
-		d.SNR.Y1 = 0.0
-	}
-
-	if math.IsNaN(d.SNR.Y2) {
-		d.SNR.Y2 = 0.0
-	}
-}
-
 func trimSlice(s []complex64) []complex64 {
 	if len(s) > 0 {
 		lastZero := -1
@@ -153,13 +135,40 @@ func trimSlice(s []complex64) []complex64 {
 	return s
 }
 
-func (s *SNRCalc) GetSNR() float64 {
-	y1_2 := math.Pow(s.Y1, 2)
-	radicand := 2.0*y1_2 - s.Y2
-	s.Signal = math.Sqrt(radicand)
-	s.Noise = s.Y1 - math.Sqrt(radicand)
+// The SNR calculation routine is based upon SatDump's SNR calculation routine found at:
+// https://github.com/SatDump/SatDump/blob/master/src-core/common/dsp/utils/snr_estimator.cpp
+// Which in turn is based upon the following paper:
+//
+// D. R. Pauluzzi and N. C. Beaulieu, "A comparison of SNR
+// estimation techniques for the AWGN channel," IEEE
+// Trans. Communications, Vol. 48, No. 10, pp. 1681-1691, 2000.
+//
+// TODO Break this out into a separate file, and move to a method on the SNR object
+func (d *Demodulator) GetSNR(s *[]complex64) float64 {
+	for _, samp := range *s {
+		tmp_y1 := math.Pow(cmplx.Abs(complex128(samp)), 2)
+		d.SNR.Y1 = d.SNR.Alpha*tmp_y1 + d.SNR.Beta*d.SNR.Y1
 
-	return max(0, 10.0*math.Log10(s.Signal/s.Noise))
+		tmp_y2 := math.Pow(cmplx.Abs(complex128(samp)), 4)
+		d.SNR.Y2 = d.SNR.Alpha*tmp_y2 + d.SNR.Beta*d.SNR.Y2
+	}
+
+	if math.IsNaN(d.SNR.Y1) {
+		d.SNR.Y1 = 0.0
+	}
+
+	if math.IsNaN(d.SNR.Y2) {
+		d.SNR.Y2 = 0.0
+	}
+
+	y1_2 := math.Pow(d.SNR.Y1, 2)
+	// Breaking out radicand here to avoid any floating point errors, since
+	// we sqrt it twice
+	radicand := 2.0*y1_2 - d.SNR.Y2
+	d.SNR.Signal = math.Sqrt(radicand)
+	d.SNR.Noise = d.SNR.Y1 - math.Sqrt(radicand)
+
+	return max(0, 10.0*math.Log10(d.SNR.Signal/d.SNR.Noise))
 }
 
 func (d *Demodulator) doFFT(samples []complex64) {
@@ -250,14 +259,17 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 	syncd = trimSlice(syncd)
 
 	// Update our SNR values in the demodulator
-	d.updateSNR(&syncd)
-	snr := d.SNR.GetSNR()
+	snr := d.GetSNR(&syncd)
+
 	if snr > d.PeakSNR {
 		d.PeakSNR = snr
 	}
 
-	d.AvgSNR += snr
-	d.AvgSNR /= 2
+	//To avoid strange NaN's for average
+	if snr > 0 {
+		d.AvgSNR += snr
+		d.AvgSNR /= 2
+	}
 
 	d.CurrentSNR = snr
 
