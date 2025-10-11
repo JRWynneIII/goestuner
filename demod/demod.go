@@ -2,6 +2,7 @@ package demod
 
 import (
 	"math"
+	"math/cmplx"
 	"sync"
 	"time"
 
@@ -14,6 +15,15 @@ import (
 	"github.com/racerxdl/segdsp/tools"
 	"gonum.org/v1/gonum/dsp/fourier"
 )
+
+type SNRCalc struct {
+	Y1     float64
+	Y2     float64
+	Alpha  float64
+	Beta   float64
+	Signal float64
+	Noise  float64
+}
 
 type Demodulator struct {
 	SampleInput       chan []complex64
@@ -36,6 +46,23 @@ type Demodulator struct {
 	FFTWorking        bool
 	Stopping          bool
 	FFTMutex          sync.RWMutex
+	SNR               *SNRCalc
+	CurrentSNR        float64
+	PeakSNR           float64
+	AvgSNR            float64
+}
+
+func NewSNRCalc() *SNRCalc {
+	alpha := 0.001
+	s := SNRCalc{
+		Y1:     0,
+		Y2:     0,
+		Signal: 0,
+		Noise:  0,
+		Alpha:  alpha,
+		Beta:   1.0 - alpha,
+	}
+	return &s
 }
 
 func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.Koanf, decoderInput *chan byte) *Demodulator {
@@ -76,6 +103,7 @@ func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.
 		sampleChunkSize:   int(xritConf.ChunkSize),
 		gainOmega:         float32((clockConf.Alpha * clockConf.Alpha) / 4.0),
 		DoFFT:             xritConf.DoFFT,
+		SNR:               NewSNRCalc(),
 	}
 	d.sps = d.circuitSampleRate / float32(xritConf.SymbolRate)
 
@@ -88,6 +116,50 @@ func New(stype radio.StreamType, srate float32, bufsize uint, configFile *koanf.
 	d.CostasLoop = dsp.MakeCostasLoop2(xritConf.PLLAlpha)
 
 	return &d
+}
+
+func (d *Demodulator) updateSNR(s *[]complex64) {
+	for _, samp := range *s {
+		tmp_y1 := math.Pow(cmplx.Abs(complex128(samp)), 2)
+		d.SNR.Y1 = d.SNR.Alpha*tmp_y1 + d.SNR.Beta*d.SNR.Y1
+
+		tmp_y2 := math.Pow(cmplx.Abs(complex128(samp)), 4)
+		d.SNR.Y2 = d.SNR.Alpha*tmp_y2 + d.SNR.Beta*d.SNR.Y2
+	}
+
+	if math.IsNaN(d.SNR.Y1) {
+		d.SNR.Y1 = 0.0
+	}
+
+	if math.IsNaN(d.SNR.Y2) {
+		d.SNR.Y2 = 0.0
+	}
+}
+
+func trimSlice(s []complex64) []complex64 {
+	if len(s) > 0 {
+		lastZero := -1
+		for i := len(s) - 1; i >= 0; i-- {
+			if s[i] != 0+0i {
+				break
+			}
+			lastZero = i
+		}
+		if lastZero == -1 {
+			return s
+		}
+		return s[:lastZero+1]
+	}
+	return s
+}
+
+func (s *SNRCalc) GetSNR() float64 {
+	y1_2 := math.Pow(s.Y1, 2)
+	radicand := 2.0*y1_2 - s.Y2
+	s.Signal = math.Sqrt(radicand)
+	s.Noise = s.Y1 - math.Sqrt(radicand)
+
+	return max(0, 10.0*math.Log10(s.Signal/s.Noise))
 }
 
 func (d *Demodulator) doFFT(samples []complex64) {
@@ -168,9 +240,28 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 
 	//Clock Sync
 	log.Debugf("[demod] Running Clock Sync (length: %d, mu: %f, omega: %f)", length, d.ClockRecovery.GetMu(), d.ClockRecovery.GetOmega())
+
 	syncd := make([]complex64, len(out))
 	numSymbols := d.ClockRecovery.Work(&out[0], &syncd[0], len(out))
 
+	//Trim out any extra space we have
+	//NOTE: This may or may not be a good idea, but it allows our SNR calculator to actually work
+	//	If this causes an issue with the datalink layer, then lets move the trim to the SNR object
+	syncd = trimSlice(syncd)
+
+	// Update our SNR values in the demodulator
+	d.updateSNR(&syncd)
+	snr := d.SNR.GetSNR()
+	if snr > d.PeakSNR {
+		d.PeakSNR = snr
+	}
+
+	d.AvgSNR += snr
+	d.AvgSNR /= 2
+
+	d.CurrentSNR = snr
+
+	// Do the FFT things
 	d.FFTMutex.RLock()
 	if d.DoFFT && !d.FFTWorking {
 		d.FFTMutex.RUnlock()
@@ -178,11 +269,6 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 	} else {
 		d.FFTMutex.RUnlock()
 	}
-
-	//	for _, i := range out {
-	//		fmt.Printf("%f %f\n", real(i), imag(i))
-	//	}
-	//	os.Exit(1)
 
 	symbols := d.processSymbols(syncd, numSymbols)
 
@@ -194,8 +280,6 @@ func (d *Demodulator) demodBlock(samples []complex64) {
 }
 
 func (d *Demodulator) processSymbols(ob []complex64, numSymbols int) []byte {
-	log.Debugf("[demod] Processing symbols")
-
 	symbols := make([]byte, numSymbols)
 	for i := 0; i < numSymbols; i++ {
 		val := ob[i]

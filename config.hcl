@@ -1,6 +1,6 @@
 radio  {
   driver = "rtltcp"
-  address = "10.0.0.83:1234"
+  address = "10.0.2.30:1234"
   device_index = 0
   gain = 5
   frequency = 1694100000
