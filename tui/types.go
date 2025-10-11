@@ -28,10 +28,13 @@ type DecoderStats struct {
 	FrameLock           bool
 	TotalPackets        int
 	TotalDroppedPackets int
+	SNR                 float64
+	AvgSNR              float64
+	PeakSNR             float64
 }
 
 var overallDecoderStats = DecoderStats{
-	false, 0, 0,
+	false, 0, 0, 0.0, 0.0, 0.0,
 }
 
 var DecoderStatsMutex sync.RWMutex
@@ -50,7 +53,7 @@ func WriteOverallDecoderStats(d DecoderStats) {
 }
 
 func ResetChannelAndDecoderStats() {
-	WriteOverallDecoderStats(DecoderStats{false, 0, 0})
+	WriteOverallDecoderStats(DecoderStats{false, 0, 0, 0.0, 0.0, 0.0})
 
 	channels = []Channel{{0, datalink.VCIDs[0], 0, 0},
 		{1, datalink.VCIDs[1], 0, 0},
@@ -118,7 +121,7 @@ func ReadChannelData(idx int) Channel {
 }
 
 func (l *LockTableData) GetRowCount() int {
-	return 3
+	return 6
 }
 
 func (l *LockTableData) GetColumnCount() int {
@@ -149,6 +152,50 @@ func (l *LockTableData) GetCell(row, column int) *tview.TableCell {
 		}
 
 		return tview.NewTableCell(fmt.Sprintf("%d", ReadOverallDecoderStats().TotalDroppedPackets))
+	case 3:
+		if column == 0 {
+			return tview.NewTableCell("SNR:")
+		}
+
+		snr := ReadOverallDecoderStats().SNR
+		color := ""
+		if snr < 1.0 {
+			color = "[red]"
+		} else {
+			color = "[green]"
+		}
+
+		return tview.NewTableCell(fmt.Sprintf("%s%f", color, snr))
+	case 4:
+		if column == 0 {
+			return tview.NewTableCell("Average SNR:")
+		}
+
+		snr := ReadOverallDecoderStats().AvgSNR
+		color := ""
+		if snr < 1.0 {
+			color = "[red]"
+		} else {
+			color = "[green]"
+		}
+
+		return tview.NewTableCell(fmt.Sprintf("%s%f", color, snr))
+	case 5:
+		if column == 0 {
+			return tview.NewTableCell("Peak SNR:")
+		}
+
+		snr := ReadOverallDecoderStats().PeakSNR
+		color := ""
+		if snr < 1.0 {
+			color = "[red]"
+		} else {
+			color = "[green]"
+		}
+
+		return tview.NewTableCell(fmt.Sprintf("%s%f", color, snr))
+	default:
+		return tview.NewTableCell("ERROR")
 	}
 	return tview.NewTableCell("ERROR")
 }

@@ -92,7 +92,7 @@ func StartUI(decoder *datalink.Decoder, demodulator *demod.Demodulator, r *radio
 	berGauge.SetBorder(false)
 
 	rsCorrectionsGauge := tvxwidgets.NewUtilModeGauge()
-	rsCorrectionsGauge.SetLabel("Reed-Soloman Corrections:    ")
+	rsCorrectionsGauge.SetLabel("Reed-Solomon Corrections:    ")
 	rsCorrectionsGauge.SetLabelColor(tcell.ColorLightSkyBlue)
 	rsCorrectionsGauge.SetWarnPercentage(tuiConf.RsWarnPct)
 	rsCorrectionsGauge.SetCritPercentage(tuiConf.RsCritPct)
@@ -109,9 +109,9 @@ func StartUI(decoder *datalink.Decoder, demodulator *demod.Demodulator, r *radio
 	gaugeBox.SetBorder(true)
 
 	decoderStats := tview.NewFlex().SetDirection(tview.FlexRow)
-	decoderStats.AddItem(tview.NewBox(), 0, 1, false)
-	decoderStats.AddItem(lockTable, 0, 2, false)
-	decoderStats.AddItem(tview.NewBox(), 0, 1, false)
+	//decoderStats.AddItem(tview.NewBox(), 0, 2, false)
+	decoderStats.AddItem(lockTable, 0, 6, false)
+	//decoderStats.AddItem(tview.NewBox(), 0, 1, false)
 	decoderStats.SetBorder(true)
 	decoderStats.SetTitle("Decoder Status")
 
@@ -221,22 +221,31 @@ func StartUI(decoder *datalink.Decoder, demodulator *demod.Demodulator, r *radio
 					totalPacketsDropped += channel.NumPacketsDropped
 				}
 				decoder.StatsMutex.RUnlock()
+
 				//Update gauges
 				signalGauge.SetValue(float64(sigquality))
 				berGauge.SetValue(float64(ber))
 				rsCorrectionsGauge.SetValue(float64(RSCorrectionPercent))
+
+				//Update signal plot data and SNR
+				demodulator.FFTMutex.RLock()
+
+				//TODO: Figure out how to update the SNR values outside of the update loop
+				fft := demodulator.CurrentFFT
+				snr := demodulator.CurrentSNR
+				snravg := demodulator.AvgSNR
+				snrpeak := demodulator.PeakSNR
+				demodulator.FFTMutex.RUnlock()
 
 				//Update decoder stats
 				WriteOverallDecoderStats(DecoderStats{
 					FrameLock:           frameLock,
 					TotalPackets:        totalFrames,
 					TotalDroppedPackets: totalPacketsDropped,
+					SNR:                 snr,
+					AvgSNR:              snravg,
+					PeakSNR:             snrpeak,
 				})
-
-				//Update signal plot
-				demodulator.FFTMutex.RLock()
-				fft := demodulator.CurrentFFT
-				demodulator.FFTMutex.RUnlock()
 
 				if len(fft) > 0 {
 					var bins []float64

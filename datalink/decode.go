@@ -247,7 +247,7 @@ func (d *Decoder) errorCorrectPacket() {
 		d.currentFrameCorrupt = false
 		d.lastFrameOk = true
 		d.AverageRsCorrections = (float64(totalBytesFixed) / float64(len(d.DecodedBytes))) * 100.0
-		log.Infof("[Reed-Soloman] Last packet: Fixed %d of %d bytes", totalBytesFixed, len(d.DecodedBytes))
+		log.Infof("[Reed-Solomon] Last packet: Fixed %d of %d bytes", totalBytesFixed, len(d.DecodedBytes))
 	}
 
 }
@@ -315,7 +315,7 @@ func (d *Decoder) Start() {
 				d.FrameLock = true
 				d.StatsMutex.Unlock()
 
-				log.Infof("Got frame: vcid: %d (%s) scid: %d object number: %d", int(vcid), VCIDs[int(vcid)], scid, counter)
+				log.Infof("[Data-Link] Got frame: vcid: %d (%s) scid: %d object number: %d", int(vcid), VCIDs[int(vcid)], scid, counter)
 				d.StatsMutex.Lock()
 				d.RxPacketsPerChannel[int(vcid)]++
 				d.StatsMutex.Unlock()

@@ -111,8 +111,8 @@ Alternatively, if you'd like to connect `goestuner` to an `rtl_tcp` server, simp
 #### TUI
 A few tunables are exposed to allow cusomization of the TUI. These parameters are listed in the `tui {}` block in the config file. 
 * `refresh_ms = 500`: Sets the refresh rate of the signal meters and packet/decoder stats to half a second (value is in milliseconds)
-* `rs_threshold_warn_pct = 20`: Defines the percentage value that the "Reed-Soloman Corrections" meter turns yellow
-* `rs_threshold_crit_pct = 25`: Defines the percentage value that the "Reed-Soloman Corrections" meter turns red
+* `rs_threshold_warn_pct = 20`: Defines the percentage value that the "Reed-Solomon Corrections" meter turns yellow
+* `rs_threshold_crit_pct = 25`: Defines the percentage value that the "Reed-Solomon Corrections" meter turns red
 * `vit_threshold_warn_pct = 10`: Defines the percentage value that the "Viterbi Error Rate" meter turns yellow
 * `vit_threshold_crit_pct = 15`: Defines the percentage value that the "Viterbi Error Rate" meter turns red
 * `enable_log_output = true`: Disables the log output in the bottom box, and makes the signal meters larger. Helpful if the meters are still too small to see on a laptop screen in the sunlight
