@@ -6,12 +6,15 @@ import (
 	"os"
 	"runtime/pprof"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/kong"
 	"github.com/charmbracelet/log"
+	"github.com/jrwynneiii/ccsds_tools"
+	"github.com/jrwynneiii/ccsds_tools/layers/datalink"
+	"github.com/jrwynneiii/ccsds_tools/layers/physical"
+	"github.com/jrwynneiii/ccsds_tools/pipeline"
 	"github.com/jrwynneiii/goestuner/config"
-	"github.com/jrwynneiii/goestuner/datalink"
-	"github.com/jrwynneiii/goestuner/demod"
 	"github.com/jrwynneiii/goestuner/radio"
 	"github.com/jrwynneiii/goestuner/tui"
 
@@ -19,6 +22,7 @@ import (
 	"github.com/knadh/koanf/providers/env/v2"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
+	SatHelper "github.com/opensatelliteproject/libsathelper"
 )
 
 var cli struct {
@@ -103,25 +107,41 @@ func main() {
 		xritDoFFT := configFile.Bool("xrit.do_fft")
 
 		log.Debugf("Found radio definition for %s: %##v", rname, rdef)
+		log.Debugf("Starting CCSDS pipeline")
+
+		pipeline := pipeline.New(configFile)
+		pipeline.Register(ccsds_tools.PhysicalLayer)
+		pipeline.Register(ccsds_tools.DataLinkLayer)
+		framesOut := pipeline.Layers[ccsds_tools.DataLinkLayer].GetOutput().(*chan []byte)
+		samplesIn := pipeline.Layers[ccsds_tools.PhysicalLayer].GetInput().(*chan []complex64)
+
+		r := radio.New[complex64](rdef, rname, radio.CF32, xritChunkSize, samplesIn)
+		r.Connect()
+
 		log.Debug("Starting init of SDR")
-		switch rdef.SampleType {
-		case "complex64":
-			decoder := datalink.New(xritChunkSize, configFile)
-			demodulator := demod.New(radio.CF32, float32(rdef.SampleRate), xritChunkSize, configFile, &decoder.SymbolsInput)
-			r := radio.New[complex64](rdef, rname, radio.CF32, xritChunkSize, &demodulator.SampleInput)
-			r.Connect()
+		go r.Start()
+		pipeline.Start()
 
-			go r.Start()
-			go demodulator.Start()
-			go decoder.Start()
-			defer demodulator.Close()
-			defer decoder.Close()
-			defer r.Destroy()
+		defer pipeline.Destroy()
+		defer r.Destroy()
 
-			tui.StartUI(decoder, demodulator, r, xritDoFFT, tuiDef)
-		default:
-			log.Fatalf("Unsupported sample_type defined for radio %s\n Supported sample types are: [CF32]", rname)
-		}
+		go func() {
+			for {
+				select {
+				case frame := <-*framesOut:
+					vcid := frame[1] & 0x3F
+					counter := uint(frame[2])
+					counter = SatHelper.ToolsSwapEndianess(counter)
+					counter &= 0xFFFFFF00
+					counter >>= 8
+					log.Infof("Got frame: vcid: %d (%s) object number: %d", int(vcid), datalink.VCIDs[int(vcid)], counter)
+				default:
+					time.Sleep(50 * time.Millisecond)
+				}
+			}
+		}()
+
+		tui.StartUI(pipeline.Layers[ccsds_tools.DataLinkLayer].(*datalink.Decoder), pipeline.Layers[ccsds_tools.PhysicalLayer].(*physical.Demodulator), r, xritDoFFT, tuiDef)
 	default:
 		log.Info("Command not recognized")
 	}
