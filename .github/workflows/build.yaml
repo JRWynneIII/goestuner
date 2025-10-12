@@ -23,8 +23,11 @@ jobs:
           cd ..
       - name: build
         run: go build
+      - name: Set artifact name
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: 'goestuner-$(git rev-parse --short HEAD)'
+          name: goestuner-${{ steps.vars.outputs.sha_short }}
           path: goestuner
