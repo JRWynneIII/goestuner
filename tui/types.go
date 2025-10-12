@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/jrwynneiii/goestuner/datalink"
+	"github.com/jrwynneiii/ccsds_tools/layers/datalink"
 	"github.com/rivo/tview"
 )
 

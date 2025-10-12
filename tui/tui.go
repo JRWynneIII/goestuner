@@ -7,9 +7,9 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/gdamore/tcell/v2"
+	"github.com/jrwynneiii/ccsds_tools/layers/datalink"
+	"github.com/jrwynneiii/ccsds_tools/layers/physical"
 	"github.com/jrwynneiii/goestuner/config"
-	"github.com/jrwynneiii/goestuner/datalink"
-	"github.com/jrwynneiii/goestuner/demod"
 	"github.com/jrwynneiii/goestuner/radio"
 	"github.com/navidys/tvxwidgets"
 	"github.com/rivo/tview"
@@ -19,7 +19,7 @@ import (
 var LogOut *tview.TextView
 var DebugOut *tview.TextView
 
-func StartUI(decoder *datalink.Decoder, demodulator *demod.Demodulator, r *radio.Radio[complex64], enableFFT bool, tuiConf config.TuiConf) {
+func StartUI(decoder *datalink.Decoder, demodulator *physical.Demodulator, r *radio.Radio[complex64], enableFFT bool, tuiConf config.TuiConf) {
 	enableDebugOutput := false
 	debugVisible := false
 	pause := false
@@ -149,7 +149,7 @@ func StartUI(decoder *datalink.Decoder, demodulator *demod.Demodulator, r *radio
 				r.Pause()
 				//Wait for physical layer to drain
 				log.Debug("Waiting for phyiscal layer to drain")
-				for len(demodulator.SampleInput) > 0 {
+				for len(*demodulator.SampleInput) > 0 {
 					time.Sleep(50 * time.Millisecond)
 				}
 				//Forcibly flush the datalink layer. This sucks but it is what it is
