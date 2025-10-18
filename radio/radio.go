@@ -3,16 +3,12 @@ package radio
 // #cgo CFLAGS: -g -Wall
 // #cgo LDFLAGS: -lSoapySDR
 import (
-	"fmt"
 	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/jrwynneiii/goestuner/types"
 
 	"github.com/pothosware/go-soapy-sdr/pkg/device"
-	"github.com/pothosware/go-soapy-sdr/pkg/modules"
-	"github.com/pothosware/go-soapy-sdr/pkg/sdrlogger"
-	"github.com/pothosware/go-soapy-sdr/pkg/version"
 )
 
 type Radio struct {
@@ -28,132 +24,6 @@ type Radio struct {
 	device    *device.SDRDevice
 	stream    any
 	Stopping  bool
-}
-
-// Tracks overall information about the SoapySDR environment and available devices/modules
-type SoapySubsystem struct {
-	ABIVersion string
-	APIVersion string
-	LibVersion string
-	Modules    []SoapyModule
-	Devices    []*device.SDRDevice
-}
-
-type SoapyModule struct {
-	Name    string
-	Version string
-}
-
-func (s *SoapySubsystem) PrintVersion(debug bool) {
-	if debug {
-		log.Debugf("Using SoapySDR versions: ABI: %s API: %s Lib: %s", s.ABIVersion, s.APIVersion, s.LibVersion)
-	} else {
-		log.Infof("Using SoapySDR versions: ABI: %s API: %s Lib: %s", s.ABIVersion, s.APIVersion, s.LibVersion)
-	}
-}
-
-func (s *SoapySubsystem) PrintModuleInfo(debug bool) {
-	for _, m := range s.Modules {
-		if debug {
-			log.Debugf("Found SoapySDR module: %v, version: %v", m.Name, m.Version)
-		} else {
-			log.Infof("Found SoapySDR module: %v, version: %v", m.Name, m.Version)
-		}
-	}
-}
-
-func (s *SoapySubsystem) PrintSearchPaths(debug bool) {
-	searchPaths := modules.ListSearchPaths()
-	if len(searchPaths) > 0 {
-		for i, searchPath := range searchPaths {
-			if debug {
-				log.Debugf("Search path #%d: %v", i, searchPath)
-			} else {
-				log.Infof("Search path #%d: %v", i, searchPath)
-			}
-		}
-	} else {
-		if debug {
-			log.Debug("Search paths: [none]")
-		} else {
-			log.Info("Search paths: [none]")
-		}
-	}
-}
-
-func InitSoapySDR() (*SoapySubsystem, error) {
-	subsys := SoapySubsystem{
-		ABIVersion: version.GetABIVersion(),
-		APIVersion: version.GetAPIVersion(),
-		LibVersion: version.GetLibVersion(),
-	}
-
-	subsys.PrintVersion(true)
-
-	log.Debugf("SoapySDR modules root path: %v", modules.GetRootPath())
-
-	subsys.PrintSearchPaths(true)
-
-	modulesFound := modules.ListModules()
-	if len(modulesFound) > 0 {
-		for _, module := range modulesFound {
-			moduleVersion := modules.GetModuleVersion(module)
-			if len(moduleVersion) == 0 {
-				moduleVersion = "[None]"
-			}
-			subsys.Modules = append(subsys.Modules, SoapyModule{module, moduleVersion})
-		}
-	} else {
-		return &subsys, fmt.Errorf("No SoapySDR modules found")
-	}
-
-	subsys.PrintModuleInfo(true)
-	sdrlogger.SetLogLevel(sdrlogger.Error)
-	return &subsys, nil
-}
-
-func LogAllSoapySDRDevices() {
-	// List Soapy library information
-	log.Infof("Using SoapySDR versions: ABI: %s API: %s Lib: %s", version.GetABIVersion(), version.GetAPIVersion(), version.GetLibVersion())
-	log.Infof("SoapySDR modules root path: %v", modules.GetRootPath())
-
-	modulesFound := modules.ListModules()
-	if len(modulesFound) > 0 {
-		for _, module := range modulesFound {
-			moduleVersion := modules.GetModuleVersion(module)
-			if len(moduleVersion) == 0 {
-				moduleVersion = "[None]"
-			}
-			log.Infof("Found SoapySDR module: %v, version: %v", module, moduleVersion)
-		}
-	} else {
-		log.Info("No SoapySDR modules found")
-	}
-
-	// Tune down the logger for soapy so that it doesn't yell about rtl-tcp
-	sdrlogger.SetLogLevel(sdrlogger.Error)
-
-	// Find all our devices and list info
-	devices := device.Enumerate(nil)
-	log.Infof("Found %d devices", len(devices))
-	args := make([]map[string]string, len(devices))
-	for idx, dev := range devices {
-		args[idx] = map[string]string{"driver": dev["driver"]}
-	}
-	if devs, err := device.MakeList(args); err == nil {
-		for idx, dev := range devs {
-			log.Infof("Driver: %s", args[idx]["driver"])
-			LogAvailSettings(dev)
-		}
-		// This appears to do a double free in the cgo library for Soapy. Idfk why so we're
-		// Not being a good dev here and letting the OS close the device i guess
-		//if err := device.UnmakeList(devs); err != nil {
-		//	log.Errorf("Could not close SDR devices: %v", err)
-		//}
-	} else {
-		log.Fatalf("SoapySDR could not open devices: %v", err)
-	}
-
 }
 
 func (r *Radio) Start() {
@@ -213,30 +83,6 @@ func (r *Radio) Read(num uint) any {
 	}
 
 	return []complex64{}
-}
-
-func LogAvailSettings(dev *device.SDRDevice) {
-	//Display settings
-	log.Infof("Current settings:")
-	settings := dev.GetSettingInfo()
-	if len(settings) > 0 {
-		for _, setting := range settings {
-			log.Infof("\t- %s: %v", setting.Key, setting.Value)
-		}
-	}
-
-	//Get sample rate range
-	numChannels := dev.GetNumChannels(device.DirectionRX)
-	log.Info("Channel info:")
-	for channel := uint(0); channel < numChannels; channel++ {
-		log.Infof("Channel %d:", channel)
-		log.Infof("\tAvailable sample rates:")
-		log.Infof("\t\t- %v", dev.GetSampleRate(device.DirectionRX, channel))
-		for _, sampleRateRange := range dev.GetSampleRateRange(device.DirectionRX, channel) {
-			log.Infof("\t\t- %v", sampleRateRange.ToString())
-		}
-		log.Infof("\tIQ Sample Types: %v", dev.GetStreamFormats(device.DirectionRX, channel))
-	}
 }
 
 func (r *Radio) Connect() {

@@ -40,7 +40,7 @@ var cli struct {
 var configFile = koanf.New(".")
 
 func getConfigPath() string {
-	paths := []string{"/etc/goestuner/config.hcl", "~/.config/goestuner/config.hcl", "./config.hcl"}
+	paths := []string{"./config.hcl", "~/.config/goestuner/config.hcl", "/etc/goestuner/config.hcl"}
 	for _, path := range paths {
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 			log.Infof("Found config file: %s", path)
@@ -86,8 +86,11 @@ func main() {
 	case "config":
 		config.AutoConfig()
 	case "probe":
-		radio.LogAllSoapySDRDevices()
-
+		if s, err := radio.InitSoapySDR(); err == nil {
+			s.LogAllSoapySDRDevices()
+		} else {
+			panic(err)
+		}
 	case "tune":
 		rname := configFile.String("radio.driver")
 
