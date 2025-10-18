@@ -17,6 +17,7 @@ import (
 	"github.com/jrwynneiii/goestuner/config"
 	"github.com/jrwynneiii/goestuner/radio"
 	"github.com/jrwynneiii/goestuner/tui"
+	"github.com/jrwynneiii/goestuner/types"
 
 	"github.com/knadh/koanf/parsers/hcl"
 	"github.com/knadh/koanf/providers/env/v2"
@@ -32,6 +33,8 @@ var cli struct {
 	} `cmd:"" help:"List the available radios and SoapySDR configuration"`
 	Tune struct {
 	} `cmd:"" help:"Starts the TUI and connects to the SDR"`
+	Config struct {
+	} `cmd:"" help:"Opens the configuration file creator"`
 }
 
 var configFile = koanf.New(".")
@@ -80,13 +83,15 @@ func main() {
 	}
 
 	switch flags.Command() {
+	case "config":
+		config.AutoConfig()
 	case "probe":
 		radio.LogAllSoapySDRDevices()
 
 	case "tune":
 		rname := configFile.String("radio.driver")
 
-		rdef := config.RadioConf{
+		rdef := types.RadioConf{
 			Address:     configFile.String("radio.address"),
 			DeviceIndex: configFile.Int("radio.device_index"),
 			Gain:        configFile.Int("radio.gain"),
@@ -95,7 +100,7 @@ func main() {
 			SampleType:  configFile.String("radio.sample_type"),
 			Decimation:  configFile.String("radio.decimation"),
 		}
-		tuiDef := config.TuiConf{
+		tuiDef := types.TuiConf{
 			RefreshMs:       configFile.Int("tui.refresh_ms"),
 			RsWarnPct:       configFile.Float64("tui.rs_threshold_warn_pct"),
 			RsCritPct:       configFile.Float64("tui.rs_threshold_crit_pct"),
@@ -115,7 +120,7 @@ func main() {
 		framesOut := pipeline.Layers[ccsds_tools.DataLinkLayer].GetOutput().(*chan []byte)
 		samplesIn := pipeline.Layers[ccsds_tools.PhysicalLayer].GetInput().(*chan []complex64)
 
-		r := radio.New[complex64](rdef, rname, radio.CF32, xritChunkSize, samplesIn)
+		r := radio.New(rdef, rname, xritChunkSize, samplesIn)
 		r.Connect()
 
 		log.Debug("Starting init of SDR")

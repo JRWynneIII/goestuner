@@ -9,8 +9,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/jrwynneiii/ccsds_tools/layers/datalink"
 	"github.com/jrwynneiii/ccsds_tools/layers/physical"
-	"github.com/jrwynneiii/goestuner/config"
 	"github.com/jrwynneiii/goestuner/radio"
+	"github.com/jrwynneiii/goestuner/types"
 	"github.com/navidys/tvxwidgets"
 	"github.com/rivo/tview"
 )
@@ -19,7 +19,7 @@ import (
 var LogOut *tview.TextView
 var DebugOut *tview.TextView
 
-func StartUI(decoder *datalink.Decoder, demodulator *physical.Demodulator, r *radio.Radio[complex64], enableFFT bool, tuiConf config.TuiConf) {
+func StartUI(decoder *datalink.Decoder, demodulator *physical.Demodulator, r *radio.Radio, enableFFT bool, tuiConf types.TuiConf) {
 	enableDebugOutput := false
 	debugVisible := false
 	pause := false

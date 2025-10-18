@@ -3,10 +3,11 @@ package radio
 // #cgo CFLAGS: -g -Wall
 // #cgo LDFLAGS: -lSoapySDR
 import (
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/jrwynneiii/goestuner/config"
+	"github.com/jrwynneiii/goestuner/types"
 
 	"github.com/pothosware/go-soapy-sdr/pkg/device"
 	"github.com/pothosware/go-soapy-sdr/pkg/modules"
@@ -14,33 +15,12 @@ import (
 	"github.com/pothosware/go-soapy-sdr/pkg/version"
 )
 
-type StreamType int
-
-type StreamConstraint interface {
-	uint8 | int8 | uint16 | int16 | complex64 | complex128
-}
-
-const (
-	CU8 StreamType = iota
-	CS8
-	CU16
-	CS16
-	CF32
-	CF64
-)
-
-type Radio[T StreamConstraint] struct {
+type Radio struct {
 	SamplesOutput *chan []complex64
 	Driver        string
 	Address       string
 	SampleRate    float64
-	SampleType    StreamType
-	BufferCU8     [][]uint8
-	BufferCS8     [][]int8
-	BufferCU16    [][]uint16
-	BufferCS16    [][]int16
 	BufferCF32    [][]complex64
-	BufferCF64    [][]complex128
 	Frequency     float64
 	//Private:
 	chunksize uint
@@ -50,18 +30,69 @@ type Radio[T StreamConstraint] struct {
 	Stopping  bool
 }
 
-func InitSoapySDR() {
-	log.Debugf("Using SoapySDR versions: ABI: %s API: %s Lib: %s", version.GetABIVersion(), version.GetAPIVersion(), version.GetLibVersion())
-	log.Debugf("SoapySDR modules root path: %v", modules.GetRootPath())
+// Tracks overall information about the SoapySDR environment and available devices/modules
+type SoapySubsystem struct {
+	ABIVersion string
+	APIVersion string
+	LibVersion string
+	Modules    []SoapyModule
+	Devices    []*device.SDRDevice
+}
 
+type SoapyModule struct {
+	Name    string
+	Version string
+}
+
+func (s *SoapySubsystem) PrintVersion(debug bool) {
+	if debug {
+		log.Debugf("Using SoapySDR versions: ABI: %s API: %s Lib: %s", s.ABIVersion, s.APIVersion, s.LibVersion)
+	} else {
+		log.Infof("Using SoapySDR versions: ABI: %s API: %s Lib: %s", s.ABIVersion, s.APIVersion, s.LibVersion)
+	}
+}
+
+func (s *SoapySubsystem) PrintModuleInfo(debug bool) {
+	for _, m := range s.Modules {
+		if debug {
+			log.Debugf("Found SoapySDR module: %v, version: %v", m.Name, m.Version)
+		} else {
+			log.Infof("Found SoapySDR module: %v, version: %v", m.Name, m.Version)
+		}
+	}
+}
+
+func (s *SoapySubsystem) PrintSearchPaths(debug bool) {
 	searchPaths := modules.ListSearchPaths()
 	if len(searchPaths) > 0 {
 		for i, searchPath := range searchPaths {
-			log.Debugf("Search path #%d: %v", i, searchPath)
+			if debug {
+				log.Debugf("Search path #%d: %v", i, searchPath)
+			} else {
+				log.Infof("Search path #%d: %v", i, searchPath)
+			}
 		}
 	} else {
-		log.Debug("Search paths: [none]")
+		if debug {
+			log.Debug("Search paths: [none]")
+		} else {
+			log.Info("Search paths: [none]")
+		}
 	}
+}
+
+func InitSoapySDR() (*SoapySubsystem, error) {
+	subsys := SoapySubsystem{
+		ABIVersion: version.GetABIVersion(),
+		APIVersion: version.GetAPIVersion(),
+		LibVersion: version.GetLibVersion(),
+	}
+
+	subsys.PrintVersion(true)
+
+	log.Debugf("SoapySDR modules root path: %v", modules.GetRootPath())
+
+	subsys.PrintSearchPaths(true)
 
 	modulesFound := modules.ListModules()
 	if len(modulesFound) > 0 {
@@ -70,12 +101,15 @@ func InitSoapySDR() {
 			if len(moduleVersion) == 0 {
 				moduleVersion = "[None]"
 			}
-			log.Debugf("Found SoapySDR module: %v, version: %v", module, moduleVersion)
+			subsys.Modules = append(subsys.Modules, SoapyModule{module, moduleVersion})
 		}
 	} else {
-		log.Debug("No SoapySDR modules found")
+		return &subsys, fmt.Errorf("No SoapySDR modules found")
 	}
+
+	subsys.PrintModuleInfo(true)
 	sdrlogger.SetLogLevel(sdrlogger.Error)
+	return &subsys, nil
 }
 
 func LogAllSoapySDRDevices() {
@@ -122,7 +156,7 @@ func LogAllSoapySDRDevices() {
 
 }
 
-func (r *Radio[T]) Start() {
+func (r *Radio) Start() {
 	var buf []complex64
 	for {
 		if !r.Stopping {
@@ -139,29 +173,28 @@ func (r *Radio[T]) Start() {
 
 }
 
-func New[T StreamConstraint](conf config.RadioConf, driver string, stype StreamType, bufSize uint, output *chan []complex64) *Radio[T] {
+func New(conf types.RadioConf, driver string, bufSize uint, output *chan []complex64) *Radio {
 	log.Debug("Initing SoapySDR")
-	InitSoapySDR()
+	if _, err := InitSoapySDR(); err != nil {
+		panic(err)
+	}
 
-	r := Radio[T]{
+	r := Radio{
 		Driver:        driver,
 		SampleRate:    conf.SampleRate,
-		SampleType:    stype,
 		Frequency:     conf.Frequency,
 		Address:       conf.Address,
 		SamplesOutput: output,
 		chunksize:     bufSize,
 	}
 
-	switch stype {
-	case CF32:
-		r.BufferCF32 = make([][]complex64, 1)
-		r.BufferCF32[0] = make([]complex64, bufSize)
-	}
+	r.BufferCF32 = make([][]complex64, 1)
+	r.BufferCF32[0] = make([]complex64, bufSize)
+
 	return &r
 }
 
-func (r *Radio[T]) Pause() {
+func (r *Radio) Pause() {
 	r.Stopping = true
 	r.StreamDeactivate()
 	r.StreamClose()
@@ -169,19 +202,17 @@ func (r *Radio[T]) Pause() {
 	r.BufferCF32[0] = make([]complex64, r.chunksize)
 }
 
-func (r *Radio[T]) Read(num uint) any {
+func (r *Radio) Read(num uint) any {
 	flags := make([]int, 1)
 	timeout := uint(100000) //nanosec
 
-	switch r.SampleType {
-	case CF32:
-		if !r.Stopping {
-			timeNs, numSamples, err := r.stream.(*device.SDRStreamCF32).Read(r.BufferCF32, num, flags, timeout)
-			log.Debugf("timeNs: %v, numSamples: %v, err: %v", timeNs, numSamples, err)
-			return r.BufferCF32[0][:numSamples]
-		}
+	if !r.Stopping {
+		timeNs, numSamples, err := r.stream.(*device.SDRStreamCF32).Read(r.BufferCF32, num, flags, timeout)
+		log.Debugf("timeNs: %v, numSamples: %v, err: %v", timeNs, numSamples, err)
+		return r.BufferCF32[0][:numSamples]
 	}
-	return []T{}
+
+	return []complex64{}
 }
 
 func LogAvailSettings(dev *device.SDRDevice) {
@@ -208,7 +239,7 @@ func LogAvailSettings(dev *device.SDRDevice) {
 	}
 }
 
-func (r *Radio[T]) Connect() {
+func (r *Radio) Connect() {
 	r.args = make(map[string]string)
 	r.args["driver"] = r.Driver
 	if r.Driver == "rtltcp" {
@@ -242,74 +273,47 @@ func (r *Radio[T]) Connect() {
 
 	//Create the IQ stream
 	log.Debug("Creating the IQ stream")
-	switch r.SampleType {
-	case CF32:
-		if r.stream, err = r.device.SetupSDRStreamCF32(device.DirectionRX, []uint{0}, nil); err != nil {
-			log.Fatalf("Could not setup SDR stream! %s", err.Error())
-		}
+	if r.stream, err = r.device.SetupSDRStreamCF32(device.DirectionRX, []uint{0}, nil); err != nil {
+		log.Fatalf("Could not setup SDR stream! %s", err.Error())
 	}
 
 	//Activate the stream
 	r.StreamActivate()
 }
 
-func (r *Radio[T]) StreamActivate() {
+func (r *Radio) StreamActivate() {
 	log.Debug("Activating IQ stream")
-	switch r.SampleType {
-	case CF32:
-		log.Debug("Activating IQ stream...")
-		if err := r.stream.(*device.SDRStreamCF32).Activate(0, 0, 0); err != nil {
-			log.Fatalf("Could not activate the IQ stream! %s", err.Error())
-		}
+	log.Debug("Activating IQ stream...")
+	if err := r.stream.(*device.SDRStreamCF32).Activate(0, 0, 0); err != nil {
+		log.Fatalf("Could not activate the IQ stream! %s", err.Error())
 	}
 	//Read the first few samples and discard to make sure we have clean data
 	r.Stopping = false
 	r.Read(1024)
-	if len(r.BufferCU8) > 0 {
-		clear(r.BufferCU8[0])
-	}
-	if len(r.BufferCS8) > 0 {
-		clear(r.BufferCS8[0])
-	}
-	if len(r.BufferCU16) > 0 {
-		clear(r.BufferCU16[0])
-	}
-	if len(r.BufferCS16) > 0 {
-		clear(r.BufferCS16[0])
-	}
 	if len(r.BufferCF32) > 0 {
 		clear(r.BufferCF32[0])
 	}
-	if len(r.BufferCF64) > 0 {
-		clear(r.BufferCF64[0])
-	}
 }
 
-func (r *Radio[T]) StreamDeactivate() {
+func (r *Radio) StreamDeactivate() {
 	log.Debug("Deactivating IQ stream...")
 	if r.stream != nil {
-		switch r.SampleType {
-		case CF32:
-			if err := r.stream.(*device.SDRStreamCF32).Deactivate(0, 0); err != nil {
-				log.Fatalf("Could not deactivate the IQ stream! %s", err.Error())
-			}
+		if err := r.stream.(*device.SDRStreamCF32).Deactivate(0, 0); err != nil {
+			log.Fatalf("Could not deactivate the IQ stream! %s", err.Error())
 		}
 	}
 }
 
-func (r *Radio[T]) StreamClose() {
+func (r *Radio) StreamClose() {
 	log.Debug("Closing IQ stream...")
 	if r.stream != nil {
-		switch r.SampleType {
-		case CF32:
-			if err := r.stream.(*device.SDRStreamCF32).Close(); err != nil {
-				log.Fatalf("Could not close the IQ stream! %s", err.Error())
-			}
+		if err := r.stream.(*device.SDRStreamCF32).Close(); err != nil {
+			log.Fatalf("Could not close the IQ stream! %s", err.Error())
 		}
 	}
 }
 
-func (r *Radio[T]) Destroy() {
+func (r *Radio) Destroy() {
 	r.Stopping = true
 	r.StreamDeactivate()
 	r.StreamClose()
