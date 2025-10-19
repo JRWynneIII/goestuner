@@ -27,8 +27,9 @@ import (
 )
 
 var cli struct {
-	Verbose bool `help:"Prints debug output by default"`
-	Profile bool `help:"Output a pprof profile"`
+	Conf    string `help:"Set path to a config file (Default: [./config.hcl, ~/.config/goestuner/config.hcl, /etc/goestuner/config.hcl])"`
+	Verbose bool   `help:"Prints debug output by default"`
+	Profile bool   `help:"Output a pprof profile"`
 	Probe   struct {
 	} `cmd:"" help:"List the available radios and SoapySDR configuration"`
 	Tune struct {
@@ -40,6 +41,11 @@ var cli struct {
 var configFile = koanf.New(".")
 
 func getConfigPath() string {
+	if len(cli.Conf) > 0 {
+		log.Infof("Using config file: %s", cli.Conf)
+		return cli.Conf
+	}
+
 	paths := []string{"./config.hcl", "~/.config/goestuner/config.hcl", "/etc/goestuner/config.hcl"}
 	for _, path := range paths {
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
@@ -84,7 +90,7 @@ func main() {
 
 	switch flags.Command() {
 	case "config":
-		config.AutoConfig()
+		config.AutoConfig(getConfigPath())
 	case "probe":
 		if s, err := radio.InitSoapySDR(); err == nil {
 			s.LogAllSoapySDRDevices()

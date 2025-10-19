@@ -17,4 +17,5 @@ type RadioConf struct {
 	SampleRate  float64 `koanf:"sample_rate"`
 	SampleType  string  `koanf:"sample_type"`
 	Decimation  string  `koanf:"decimation"`
+	Name        string  `koanf:"name"`
 }
