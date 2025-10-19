@@ -55,26 +55,33 @@ Once the dependencies are satisfied, you can simply install `goestuner` with `go
 go install github.com/jrwynneiii/goestuner@latest
 ```
 
-Next, you will need to modify and copy the config file (`config.hcl`) to either `/etc/config.hcl`, `~/.config/goestuner/config.hcl`, or have a `config.hcl` in your current working directory where you run this tool.
+Before running `goestuner`, you will need to copy or generate a configuration file. The preferred method to configure `goestuner` is to use the built-in configuration tool. Simply run `goestuner config` with your SDR attached, and fill out the appropriate information (see [here](#automatically-configuring-goestuner) for more info on the configuration tool).
+
+An example configuration file is provided in this repo as `config.hcl`. Modify and copy this file to either `/etc/config.hcl`, `~/.config/goestuner/config.hcl`, or have a `config.hcl` in your current working directory where you run this tool. See [Manually configuring GOESTuner](#manually-configuring-goestuner) for more information.
 
 ### Usage
 ```
 Usage: goestuner <command> [flags]
 
 Flags:
-  -h, --help       Show context-sensitive help.
-      --verbose    Prints debug output by default
+  -h, --help           Show context-sensitive help.
+      --conf=STRING    Set path to a config file (Default: [./config.hcl, ~/.config/goestuner/config.hcl, /etc/goestuner/config.hcl])
+      --verbose        Prints debug output by default
 
 Commands:
   probe [flags]
     List the available radios and SoapySDR configuration
 
   tune [flags]
-    Starts the frontend webserver
+    Starts the TUI and connects to the SDR
+
+  config [flags]
+    Opens the configuration file creator
 
 Run "goestuner <command> --help" for more information on a command.
 ```
 
+* `config`: Opens the configuration TUI and queries any available SoapySDR compatible devices and modules and prepopulates the config with the most common settings
 * `probe`: Queries SoapySDR to list the available SDRs and their respctive settings (NOTE: Does not show anything for `rtl_tcp` devices)
 * `tune`: Starts the HRIT demodulator/decoder and TUI. Please note, that while the demodulator/HRIT decoder isn't perfect, it may take up to 30 seconds for `goestuner` to get a lock on the signal, and start decoding packets. This is normal.
 
@@ -85,6 +92,18 @@ Run "goestuner <command> --help" for more information on a command.
 * `f`: Flushes the processing stack and resets everything to default values. This is useful if using `rtl_tcp`, since it can introduce a delay between when the antenna is moved, and that is reflected in the sampling (This delay can be caused by any number of reasons, including poor network connection between the `rtl_tcp` server and the SoapySDR client)
 
 ### Configuration
+
+#### Automatically configuring GOESTuner
+
+GOESTuner includes autogeneration of a configuration file through the `config` command. Simply run `goestuner config` (or `goestuner --conf /path/to/conf.hcl config` to set a non-default location for the generated config file), and the configuration TUI will open, and `goestuner` will query all available SoapySDR compatible devices and modules that are available on your system. Simply fill out the form, and select the `Generate Configuration File` to save your changes. 
+
+The most common configuration options are already prepopulated for you. To get up and running quickly, simply just select the driver (for example: `rtlsdr`) in the `Driver` drop down list, and select your device in the `Device` drop down, then hit `Generate`.
+
+If the `librtltcpSupport` SoapySDR module is available, then the configuration tool will automatically add this as an available option. NOTE: This does not apply to SoapyRemote! 
+
+To configure `goestuner` to use `rtl-tcp`, select the `rtltcp` option in the `Driver` drop down, and modify the `Address` and `Port` fields, then select `Generate`.
+
+#### Manually configuring GOESTuner
 
 The `goestuner` config file uses the [HashiCorp Configuration Language](https://hcl.readthedocs.io/en/latest/language_design.html) DSL. Included as `config.hcl`, the example configuration file should be enough to get you started. Most values will never need to be changed, except for the `radio {}` block. This contains the configuration that is used to tell SoapySDR which radio to use. Included in the config file is an example for an RTL-SDR dongle, and one for accessing an SDR over `rtl_tcp`.
 

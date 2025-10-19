@@ -9,8 +9,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/jrwynneiii/ccsds_tools/layers/datalink"
 	"github.com/jrwynneiii/ccsds_tools/layers/physical"
-	"github.com/jrwynneiii/goestuner/config"
 	"github.com/jrwynneiii/goestuner/radio"
+	"github.com/jrwynneiii/goestuner/types"
 	"github.com/navidys/tvxwidgets"
 	"github.com/rivo/tview"
 )
@@ -19,7 +19,7 @@ import (
 var LogOut *tview.TextView
 var DebugOut *tview.TextView
 
-func StartUI(decoder *datalink.Decoder, demodulator *physical.Demodulator, r *radio.Radio[complex64], enableFFT bool, tuiConf config.TuiConf) {
+func StartUI(decoder *datalink.Decoder, demodulator *physical.Demodulator, r *radio.SDR, enableFFT bool, tuiConf types.Tui) {
 	enableDebugOutput := false
 	debugVisible := false
 	pause := false
@@ -86,16 +86,16 @@ func StartUI(decoder *datalink.Decoder, demodulator *physical.Demodulator, r *ra
 	berGauge := tvxwidgets.NewUtilModeGauge()
 	berGauge.SetLabel("Viterbi Error Rate:          ")
 	berGauge.SetLabelColor(tcell.ColorLightSkyBlue)
-	berGauge.SetWarnPercentage(tuiConf.VitWarnPct)
-	berGauge.SetCritPercentage(tuiConf.VitCritPct)
+	berGauge.SetWarnPercentage(tuiConf.VitThresholdWarnPct)
+	berGauge.SetCritPercentage(tuiConf.VitThresholdCritPct)
 	berGauge.SetEmptyColor(tcell.ColorBlack)
 	berGauge.SetBorder(false)
 
 	rsCorrectionsGauge := tvxwidgets.NewUtilModeGauge()
 	rsCorrectionsGauge.SetLabel("Reed-Solomon Corrections:    ")
 	rsCorrectionsGauge.SetLabelColor(tcell.ColorLightSkyBlue)
-	rsCorrectionsGauge.SetWarnPercentage(tuiConf.RsWarnPct)
-	rsCorrectionsGauge.SetCritPercentage(tuiConf.RsCritPct)
+	rsCorrectionsGauge.SetWarnPercentage(tuiConf.RsThresholdWarnPct)
+	rsCorrectionsGauge.SetCritPercentage(tuiConf.RsThresholdCritPct)
 	rsCorrectionsGauge.SetEmptyColor(tcell.ColorBlack)
 	rsCorrectionsGauge.SetBorder(false)
 

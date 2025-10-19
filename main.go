@@ -17,6 +17,7 @@ import (
 	"github.com/jrwynneiii/goestuner/config"
 	"github.com/jrwynneiii/goestuner/radio"
 	"github.com/jrwynneiii/goestuner/tui"
+	"github.com/jrwynneiii/goestuner/types"
 
 	"github.com/knadh/koanf/parsers/hcl"
 	"github.com/knadh/koanf/providers/env/v2"
@@ -26,18 +27,26 @@ import (
 )
 
 var cli struct {
-	Verbose bool `help:"Prints debug output by default"`
-	Profile bool `help:"Output a pprof profile"`
+	Conf    string `help:"Set path to a config file (Default: [./config.hcl, ~/.config/goestuner/config.hcl, /etc/goestuner/config.hcl])"`
+	Verbose bool   `help:"Prints debug output by default"`
+	Profile bool   `help:"Output a pprof profile"`
 	Probe   struct {
 	} `cmd:"" help:"List the available radios and SoapySDR configuration"`
 	Tune struct {
 	} `cmd:"" help:"Starts the TUI and connects to the SDR"`
+	Config struct {
+	} `cmd:"" help:"Opens the configuration file creator"`
 }
 
 var configFile = koanf.New(".")
 
 func getConfigPath() string {
-	paths := []string{"/etc/goestuner/config.hcl", "~/.config/goestuner/config.hcl", "./config.hcl"}
+	if len(cli.Conf) > 0 {
+		log.Infof("Using config file: %s", cli.Conf)
+		return cli.Conf
+	}
+
+	paths := []string{"./config.hcl", "~/.config/goestuner/config.hcl", "/etc/goestuner/config.hcl"}
 	for _, path := range paths {
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 			log.Infof("Found config file: %s", path)
@@ -66,6 +75,7 @@ func main() {
 
 	if err := configFile.Load(file.Provider(getConfigPath()), hcl.Parser(true)); err != nil {
 		log.Errorf("Could not read config file: %v", err)
+		log.Errorf("If you haven't run goestuner before, run `goestuner config` to generate a config file!")
 		log.Error("Attempting to use environment variables")
 		configFile.Load(env.Provider("", env.Opt{
 			Prefix: "GOESTUNER_",
@@ -80,33 +90,37 @@ func main() {
 	}
 
 	switch flags.Command() {
+	case "config":
+		config.AutoConfig(getConfigPath())
 	case "probe":
-		radio.LogAllSoapySDRDevices()
-
+		if s, err := radio.InitSoapySDR(); err == nil {
+			s.LogAllSoapySDRDevices()
+		} else {
+			panic(err)
+		}
 	case "tune":
-		rname := configFile.String("radio.driver")
-
-		rdef := config.RadioConf{
+		rdef := types.Radio{
+			Driver:      configFile.String("radio.driver"),
+			Name:        configFile.String("radio.name"),
+			DeviceIndex: configFile.String("radio.device_index"),
 			Address:     configFile.String("radio.address"),
-			DeviceIndex: configFile.Int("radio.device_index"),
 			Gain:        configFile.Int("radio.gain"),
 			Frequency:   configFile.Float64("radio.frequency"),
 			SampleRate:  configFile.Float64("radio.sample_rate"),
-			SampleType:  configFile.String("radio.sample_type"),
-			Decimation:  configFile.String("radio.decimation"),
+			Decimation:  configFile.Int("radio.decimation"),
 		}
-		tuiDef := config.TuiConf{
-			RefreshMs:       configFile.Int("tui.refresh_ms"),
-			RsWarnPct:       configFile.Float64("tui.rs_threshold_warn_pct"),
-			RsCritPct:       configFile.Float64("tui.rs_threshold_crit_pct"),
-			VitWarnPct:      configFile.Float64("tui.vit_threshold_warn_pct"),
-			VitCritPct:      configFile.Float64("tui.vit_threshold_crit_pct"),
-			EnableLogOutput: configFile.Bool("tui.enable_log_output"),
+		tuiDef := types.Tui{
+			RefreshMs:           configFile.Int("tui.refresh_ms"),
+			RsThresholdWarnPct:  configFile.Float64("tui.rs_threshold_warn_pct"),
+			RsThresholdCritPct:  configFile.Float64("tui.rs_threshold_crit_pct"),
+			VitThresholdWarnPct: configFile.Float64("tui.vit_threshold_warn_pct"),
+			VitThresholdCritPct: configFile.Float64("tui.vit_threshold_crit_pct"),
+			EnableLogOutput:     configFile.Bool("tui.enable_log_output"),
 		}
 		xritChunkSize := uint(configFile.Int("xrit.chunk_size"))
 		xritDoFFT := configFile.Bool("xrit.do_fft")
 
-		log.Debugf("Found radio definition for %s: %##v", rname, rdef)
+		log.Debugf("Found radio definition for %s (%s): %##v", rdef.Name, rdef.DeviceIndex, rdef)
 		log.Debugf("Starting CCSDS pipeline")
 
 		pipeline := pipeline.New(configFile)
@@ -115,7 +129,7 @@ func main() {
 		framesOut := pipeline.Layers[ccsds_tools.DataLinkLayer].GetOutput().(*chan []byte)
 		samplesIn := pipeline.Layers[ccsds_tools.PhysicalLayer].GetInput().(*chan []complex64)
 
-		r := radio.New[complex64](rdef, rname, radio.CF32, xritChunkSize, samplesIn)
+		r := radio.New(rdef, xritChunkSize, samplesIn)
 		r.Connect()
 
 		log.Debug("Starting init of SDR")
