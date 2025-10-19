@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/jrwynneiii/goestuner/radio"
+	"github.com/jrwynneiii/goestuner/types"
 )
 
 func AutoConfig(path string) {
@@ -21,7 +22,7 @@ func AutoConfig(path string) {
 	}
 }
 
-func GenerateConfigFile(path string, driver string, device string, address string, port string, gain string, freq string, srate string) {
+func GenerateConfigFile(path string, driver string, device string, address string, port string, gain string, freq string, srate string, index string) {
 	dir := filepath.Dir(path)
 	log.Infof("Ensuring directory %s exists", dir)
 
@@ -31,30 +32,31 @@ func GenerateConfigFile(path string, driver string, device string, address strin
 	}
 
 	gainInt, _ := strconv.Atoi(gain)
-	freqInt, _ := strconv.Atoi(freq)
-	srateInt, _ := strconv.Atoi(srate)
+	freqFlt, _ := strconv.ParseFloat(freq, 64)
+	srateFlt, _ := strconv.ParseFloat(srate, 64)
 
-	defaultVals := ConfigFile{
-		Agc{
+	defaultVals := types.ConfigFile{
+		types.Agc{
 			Rate:      0.01,
 			Reference: 0.5,
 			Gain:      1.0,
 			MaxGain:   4000,
 		},
-		Clockrecovery{
+		types.Clockrecovery{
 			Mu:         0.5,
 			Alpha:      0.0037,
 			OmegaLimit: 0.005,
 		},
-		Radio{
-			Decimation: 1,
-			Driver:     driver,
-			Frequency:  freqInt,
-			Gain:       gainInt,
-			Name:       device,
-			SampleRate: srateInt,
+		types.Radio{
+			Decimation:  1,
+			Driver:      driver,
+			Frequency:   freqFlt,
+			Gain:        gainInt,
+			Name:        device,
+			DeviceIndex: index,
+			SampleRate:  srateFlt,
 		},
-		Tui{
+		types.Tui{
 			EnableLogOutput:     true,
 			RefreshMs:           500,
 			RsThresholdCritPct:  5,
@@ -62,10 +64,10 @@ func GenerateConfigFile(path string, driver string, device string, address strin
 			VitThresholdCritPct: 5,
 			VitThresholdWarnPct: 3,
 		},
-		Viterbi{
+		types.Viterbi{
 			MaxErrors: 500,
 		},
-		Xrit{
+		types.Xrit{
 			ChunkSize:              66560,
 			DecimationFactor:       1,
 			DoFft:                  true,
@@ -75,7 +77,7 @@ func GenerateConfigFile(path string, driver string, device string, address strin
 			RrcTaps:                31,
 			SymbolRate:             927000,
 		},
-		Xritframe{
+		types.Xritframe{
 			FrameSize:     1024,
 			LastFrameSize: 8,
 		},

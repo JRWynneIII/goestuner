@@ -19,7 +19,7 @@ import (
 var LogOut *tview.TextView
 var DebugOut *tview.TextView
 
-func StartUI(decoder *datalink.Decoder, demodulator *physical.Demodulator, r *radio.Radio, enableFFT bool, tuiConf types.TuiConf) {
+func StartUI(decoder *datalink.Decoder, demodulator *physical.Demodulator, r *radio.SDR, enableFFT bool, tuiConf types.Tui) {
 	enableDebugOutput := false
 	debugVisible := false
 	pause := false
@@ -86,16 +86,16 @@ func StartUI(decoder *datalink.Decoder, demodulator *physical.Demodulator, r *ra
 	berGauge := tvxwidgets.NewUtilModeGauge()
 	berGauge.SetLabel("Viterbi Error Rate:          ")
 	berGauge.SetLabelColor(tcell.ColorLightSkyBlue)
-	berGauge.SetWarnPercentage(tuiConf.VitWarnPct)
-	berGauge.SetCritPercentage(tuiConf.VitCritPct)
+	berGauge.SetWarnPercentage(tuiConf.VitThresholdWarnPct)
+	berGauge.SetCritPercentage(tuiConf.VitThresholdCritPct)
 	berGauge.SetEmptyColor(tcell.ColorBlack)
 	berGauge.SetBorder(false)
 
 	rsCorrectionsGauge := tvxwidgets.NewUtilModeGauge()
 	rsCorrectionsGauge.SetLabel("Reed-Solomon Corrections:    ")
 	rsCorrectionsGauge.SetLabelColor(tcell.ColorLightSkyBlue)
-	rsCorrectionsGauge.SetWarnPercentage(tuiConf.RsWarnPct)
-	rsCorrectionsGauge.SetCritPercentage(tuiConf.RsCritPct)
+	rsCorrectionsGauge.SetWarnPercentage(tuiConf.RsThresholdWarnPct)
+	rsCorrectionsGauge.SetCritPercentage(tuiConf.RsThresholdCritPct)
 	rsCorrectionsGauge.SetEmptyColor(tcell.ColorBlack)
 	rsCorrectionsGauge.SetBorder(false)
 

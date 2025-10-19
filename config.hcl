@@ -13,13 +13,14 @@ clockrecovery {
 }
 
 radio {
-  address     = "10.0.2.30:1234"
-  decimation  = 1
-  driver      = "rtltcp"
-  frequency   = 1694100000
-  gain        = 5
-  name        = ""
-  sample_rate = 2048000
+  address      = "10.0.2.30:1234"
+  decimation   = 1
+  driver       = "rtltcp"
+  frequency    = 1694100000
+  gain         = 5
+  name         = ""
+  device_index = ""
+  sample_rate  = 2048000
 }
 
 tui {

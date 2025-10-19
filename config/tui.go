@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/jrwynneiii/goestuner/radio"
 	"github.com/rivo/tview"
@@ -33,7 +35,8 @@ func StartConfigTUI(subsys *radio.SoapySubsystem, path string) {
 				availDevices := subsys.GetDevicesByDriver(selected)
 				strDevices := []string{}
 				for _, dev := range availDevices {
-					strDevices = append(strDevices, dev.GetHardwareKey())
+					id := fmt.Sprintf("device: %s index: %s", dev.GetHardwareKey(), dev.GetHardwareInfo()["index"])
+					strDevices = append(strDevices, id)
 				}
 				dd.(*tview.DropDown).SetOptions(strDevices, nil)
 			} else {
@@ -53,19 +56,22 @@ func StartConfigTUI(subsys *radio.SoapySubsystem, path string) {
 		app.Suspend(func() {
 			_, driver := form.GetFormItemByLabel("Driver:").(*tview.DropDown).GetCurrentOption()
 			var device string
+			var index string
 			var addr string
 			var port string
 			if driver == "rtltcp" {
 				addr = form.GetFormItemByLabel("Address:").(*tview.InputField).GetText()
 				port = form.GetFormItemByLabel("Port:").(*tview.InputField).GetText()
 			} else {
-				_, device = form.GetFormItemByLabel("Device:").(*tview.DropDown).GetCurrentOption()
+				_, deviceAndIdx := form.GetFormItemByLabel("Device:").(*tview.DropDown).GetCurrentOption()
+				device = strings.Split(deviceAndIdx, " ")[1]
+				index = strings.Split(deviceAndIdx, " ")[3]
 			}
 			gain := form.GetFormItemByLabel("Gain:").(*tview.InputField).GetText()
 			freq := form.GetFormItemByLabel("Default Frequency (kHz):").(*tview.InputField).GetText()
 			srate := form.GetFormItemByLabel("Sample Rate:").(*tview.InputField).GetText()
 
-			GenerateConfigFile(path, driver, device, addr, port, gain, freq, srate)
+			GenerateConfigFile(path, driver, device, addr, port, gain, freq, srate, index)
 
 		})
 		app.Stop()
