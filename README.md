@@ -55,7 +55,7 @@ Once the dependencies are satisfied, you can simply install `goestuner` with `go
 go install github.com/jrwynneiii/goestuner@latest
 ```
 
-Before running `goestuner`, you will need to copy or generate a configuration file. The preferred method to configure `goestuner` is to use the built-in configuration tool, simply run `goestuner config` with your SDR attached, and fill out the appropriate information (see [here](#automatically-configuring-goestuner) for more info on the configuration tool).
+Before running `goestuner`, you will need to copy or generate a configuration file. The preferred method to configure `goestuner` is to use the built-in configuration tool. Simply run `goestuner config` with your SDR attached, and fill out the appropriate information (see [here](#automatically-configuring-goestuner) for more info on the configuration tool).
 
 An example configuration file is provided in this repo as `config.hcl`. Modify and copy this file to either `/etc/config.hcl`, `~/.config/goestuner/config.hcl`, or have a `config.hcl` in your current working directory where you run this tool. See [Manually configuring GOESTuner](#manually-configuring-goestuner) for more information.
 
@@ -99,7 +99,9 @@ GOESTuner includes autogeneration of a configuration file through the `config` c
 
 The most common configuration options are already prepopulated for you. To get up and running quickly, simply just select the driver (for example: `rtlsdr`) in the `Driver` drop down list, and select your device in the `Device` drop down, then hit `Generate`.
 
-If the `librtltcpSupport` SoapySDR module is available, then the configuration tool will automatically add this as an available option. NOTE: This does not apply to SoapyRemote!. To configure `goestuner` to use `rtl-tcp`, select the `rtltcp` option in the `Driver` drop down, and modify the `Address` and `Port` fields, then select `Generate`.
+If the `librtltcpSupport` SoapySDR module is available, then the configuration tool will automatically add this as an available option. NOTE: This does not apply to SoapyRemote! 
+
+To configure `goestuner` to use `rtl-tcp`, select the `rtltcp` option in the `Driver` drop down, and modify the `Address` and `Port` fields, then select `Generate`.
 
 #### Manually configuring GOESTuner
 
