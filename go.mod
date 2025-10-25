@@ -7,7 +7,7 @@ require (
 	github.com/charmbracelet/log v0.4.2
 	github.com/gdamore/tcell/v2 v2.9.0
 	github.com/hashicorp/hcl/v2 v2.24.0
-	github.com/jrwynneiii/ccsds_tools v0.0.0-20251025144703-9f62b52d76ba
+	github.com/jrwynneiii/ccsds_tools v0.0.0-20251025164932-3a9f9c003831
 	github.com/knadh/koanf/parsers/hcl v1.0.0
 	github.com/knadh/koanf/providers/env/v2 v2.0.0
 	github.com/knadh/koanf/providers/file v1.2.0
