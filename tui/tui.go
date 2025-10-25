@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/jrwynneiii/ccsds_tools/layers/datalink"
 	"github.com/jrwynneiii/ccsds_tools/layers/physical"
+	"github.com/jrwynneiii/ccsds_tools/pipeline"
 	"github.com/jrwynneiii/goestuner/radio"
 	"github.com/jrwynneiii/goestuner/types"
 	"github.com/navidys/tvxwidgets"
@@ -19,7 +20,7 @@ import (
 var LogOut *tview.TextView
 var DebugOut *tview.TextView
 
-func StartUI(decoder *datalink.Decoder, demodulator *physical.Demodulator, r *radio.SDR, enableFFT bool, tuiConf types.Tui) {
+func StartUI(pipeline *pipeline.Pipeline, decoder *datalink.Decoder, demodulator *physical.Demodulator, r *radio.SDR, enableFFT bool, tuiConf types.Tui) {
 	enableDebugOutput := false
 	debugVisible := false
 	pause := false
@@ -148,30 +149,16 @@ func StartUI(decoder *datalink.Decoder, demodulator *physical.Demodulator, r *ra
 				log.Debugf("Pausing SDR")
 				r.Pause()
 				//Wait for physical layer to drain
-				log.Debug("Waiting for phyiscal layer to drain")
-				for len(*demodulator.SampleInput) > 0 {
-					time.Sleep(50 * time.Millisecond)
-				}
-				//Forcibly flush the datalink layer. This sucks but it is what it is
-				log.Debug("Flushing datalink layer")
-				for len(*demodulator.SymbolsOutput) > 0 {
-					select {
-					case c := <-*demodulator.SymbolsOutput:
-						func(a any) {}(c)
-					}
-				}
+				log.Debug("Flushing pipeline")
+				pipeline.Flush()
+
 				//Reset stats
 				log.Debug("Resetting channel and decoder stats")
 				ResetChannelAndDecoderStats()
 
 				//Reset datalink layer
-				log.Debug("Resetting Lock and guage stats")
-				decoder.FrameLock = false
-				decoder.SigQuality = 0.0
-				decoder.AverageRsCorrections = 0
-				decoder.RxPacketsPerChannel = make(map[int]int)
-				decoder.DroppedPacketsPerChannel = make(map[int]int)
-				decoder.TotalFramesProcessed = 0
+				log.Debug("Resetting pipeline and guage stats")
+				pipeline.Reset()
 				signalGauge.SetValue(float64(decoder.SigQuality))
 				berGauge.SetValue(0.0)
 				rsCorrectionsGauge.SetValue(float64(decoder.AverageRsCorrections))

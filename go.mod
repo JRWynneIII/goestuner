@@ -7,7 +7,7 @@ require (
 	github.com/charmbracelet/log v0.4.2
 	github.com/gdamore/tcell/v2 v2.9.0
 	github.com/hashicorp/hcl/v2 v2.24.0
-	github.com/jrwynneiii/ccsds_tools v0.0.0-20251012164939-9af6ecdffb70
+	github.com/jrwynneiii/ccsds_tools v0.0.0-20251025144703-9f62b52d76ba
 	github.com/knadh/koanf/parsers/hcl v1.0.0
 	github.com/knadh/koanf/providers/env/v2 v2.0.0
 	github.com/knadh/koanf/providers/file v1.2.0
@@ -19,7 +19,7 @@ require (
 )
 
 require (
-	github.com/agext/levenshtein v1.2.1 // indirect
+	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.3.2 // indirect
@@ -45,8 +45,8 @@ require (
 	github.com/racerxdl/segdsp v0.0.0-20190825170906-a855d00a24a8 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	github.com/zclconf/go-cty v1.16.3 // indirect
-	golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b // indirect
+	github.com/zclconf/go-cty v1.17.0 // indirect
+	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/mod v0.29.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect

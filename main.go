@@ -155,7 +155,7 @@ func main() {
 			}
 		}()
 
-		tui.StartUI(pipeline.Layers[ccsds_tools.DataLinkLayer].(*datalink.Decoder), pipeline.Layers[ccsds_tools.PhysicalLayer].(*physical.Demodulator), r, xritDoFFT, tuiDef)
+		tui.StartUI(pipeline, pipeline.Layers[ccsds_tools.DataLinkLayer].(*datalink.Decoder), pipeline.Layers[ccsds_tools.PhysicalLayer].(*physical.Demodulator), r, xritDoFFT, tuiDef)
 	default:
 		log.Info("Command not recognized")
 	}
