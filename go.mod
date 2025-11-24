@@ -3,7 +3,7 @@ module github.com/jrwynneiii/goestuner
 go 1.24.7
 
 require (
-	github.com/alecthomas/kong v1.12.1
+	github.com/alecthomas/kong v1.13.0
 	github.com/charmbracelet/log v0.4.2
 	github.com/gdamore/tcell/v2 v2.9.0
 	github.com/hashicorp/hcl/v2 v2.24.0
