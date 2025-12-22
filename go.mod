@@ -10,7 +10,7 @@ require (
 	github.com/jrwynneiii/ccsds_tools v0.0.0-20251012164939-9af6ecdffb70
 	github.com/knadh/koanf/parsers/hcl v1.0.0
 	github.com/knadh/koanf/providers/env/v2 v2.0.0
-	github.com/knadh/koanf/providers/file v1.2.0
+	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/v2 v2.3.0
 	github.com/navidys/tvxwidgets v0.12.1
 	github.com/opensatelliteproject/libsathelper v0.0.0-20201213205030-0c5ee163b540
