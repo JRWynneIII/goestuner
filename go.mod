@@ -11,7 +11,7 @@ require (
 	github.com/knadh/koanf/parsers/hcl v1.0.0
 	github.com/knadh/koanf/providers/env/v2 v2.0.0
 	github.com/knadh/koanf/providers/file v1.2.0
-	github.com/knadh/koanf/v2 v2.3.0
+	github.com/knadh/koanf/v2 v2.3.2
 	github.com/navidys/tvxwidgets v0.12.1
 	github.com/opensatelliteproject/libsathelper v0.0.0-20201213205030-0c5ee163b540
 	github.com/pothosware/go-soapy-sdr v0.7.4
